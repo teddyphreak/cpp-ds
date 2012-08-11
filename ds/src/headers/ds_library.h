@@ -20,7 +20,7 @@ namespace ds_library {
 
 	class LibraryFactory {
 	private:
-		static LibraryFactory* instance = 0;
+		static LibraryFactory* instance;
 		LibraryFactory(){}
 	public:
 		static LibraryFactory* getInstance(){
@@ -31,17 +31,17 @@ namespace ds_library {
 
 		Library* getLibrary(const std::string name){
 			Library *lib = 0;
-			switch (name){
-			case "default":
+			if (name == "default "){
 				lib = new Library();
-				break;
+				return lib;
+			} else {
+				return 0;
 			}
-			return 0;
 		}
 	};
 
 	ds_common::NetList* import(std::string file, std::string toplevel);
-	void get_next(const std::ifstream& s, std::vector<std::string>& to_parse);
+	void get_next(std::ifstream& s, std::vector<std::string>& to_parse);
 	void parse_value(std::string, ds_common::NetList* netlist);
 }
 

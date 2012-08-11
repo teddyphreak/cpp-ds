@@ -12,8 +12,7 @@
 #include <list>
 #include <algorithm>
 #include <vector>
-#include <boost/bind.hpp>p>
-//#include <ds_library.h>
+#include <boost/bind.hpp>
 
 namespace ds_common {
 

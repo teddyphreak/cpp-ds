@@ -12,9 +12,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 
- ds_common::NetList* import(std::string file, std::string toplevel){
+ds_library::LibraryFactory* ds_library::LibraryFactory::instance = 0;
 
-	static const boost::regex module_regex = "module\s+(\w+)\s+\(\w+\s*,?\s*)*\);";
+ds_common::NetList* import(std::string file, std::string toplevel){
+
+	//boost::regex module_regex("module\s+(\w+)\s+\(\w+\s*,?\s*)*\);");
 
 	ds_common::NetList* netlist = 0;
 
@@ -30,15 +32,15 @@
 		std::vector<std::string> tokens;
 		std::vector<std::string> netlist_tokens;
 		while (!input.eof()){
-			get_next(input, tokens);
+			ds_library::get_next(input, tokens);
 			std::vector<std::string>::iterator it = tokens.begin();
 			for (;it != tokens.end();it++){
 
 				std::string s = *it;
-				boost::smatch what;
-				if (boost::regex_match(s, what, module_regex)) {
-
-				}
+//				boost::smatch what;
+//				if (boost::regex_match(s, what, module_regex)) {
+//
+//				}
 
 			}
 
@@ -55,11 +57,11 @@
 
 void parse_value(std::string, ds_common::NetList* netlist){
 
-	 static const boost::regex port = "";
-	 static const boost::regex instance = "";
+//	 static const boost::regex port("11");
+//	 static const boost::regex instance("11");
 }
 
-void get_next(const std::ifstream& s, std::vector<std::string>& to_parse){
+void ds_library::get_next(std::ifstream& s, std::vector<std::string>& to_parse){
 
 	static const std::string delims =";";
 	std::string line;
@@ -69,11 +71,11 @@ void get_next(const std::ifstream& s, std::vector<std::string>& to_parse){
 
 		if (s.eof())
 			break;
-		std::getline(s, line);
+		std::getline(s ,line);
 		buffer.append(line);
 
 
-	} while (buffer.find(';')!=-1);
+	} while (buffer.find(';') != std::string::npos);
 
 	boost::algorithm::split(to_parse, buffer, boost::algorithm::is_any_of(delims));
 
