@@ -14,9 +14,10 @@
 
 ds_library::LibraryFactory* ds_library::LibraryFactory::instance = 0;
 
-ds_common::NetList* import(std::string file, std::string toplevel){
+ds_common::NetList* import(const std::string& file, const std::string& toplevel){
 
 	//boost::regex module_regex("module\s+(\w+)\s+\(\w+\s*,?\s*)*\);");
+	boost::regex module_regex("AA");
 
 	ds_common::NetList* netlist = 0;
 
@@ -37,7 +38,7 @@ ds_common::NetList* import(std::string file, std::string toplevel){
 			for (;it != tokens.end();it++){
 
 				std::string s = *it;
-//				boost::smatch what;
+				boost::smatch what;
 //				if (boost::regex_match(s, what, module_regex)) {
 //
 //				}
@@ -55,7 +56,7 @@ ds_common::NetList* import(std::string file, std::string toplevel){
 	return (netlist);
 }
 
-void parse_value(std::string, ds_common::NetList* netlist){
+void parse_value(const std::string& value, ds_common::NetList* netlist){
 
 //	 static const boost::regex port("11");
 //	 static const boost::regex instance("11");

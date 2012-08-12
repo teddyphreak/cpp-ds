@@ -40,9 +40,9 @@ namespace ds_library {
 		}
 	};
 
-	ds_common::NetList* import(std::string file, std::string toplevel);
+	ds_common::NetList* import(const std::string& file, const std::string& toplevel);
 	void get_next(std::ifstream& s, std::vector<std::string>& to_parse);
-	void parse_value(std::string, ds_common::NetList* netlist);
+	void parse_value(const std::string& vlue, ds_common::NetList* netlist);
 }
 
 #endif /* LIBRARY_H_ */
