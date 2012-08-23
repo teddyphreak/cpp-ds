@@ -15,6 +15,8 @@ namespace ds_library {
 
 	class Library {
 
+		ds_common::GateDef* getGateDefinition(const ds_common::Gate* g);
+		ds_common::Gate* getGate(const std::size_t& hash);
 
 	};
 
@@ -42,7 +44,18 @@ namespace ds_library {
 
 	ds_common::NetList* import(const std::string& file, const std::string& toplevel);
 	void get_next(std::ifstream& s, std::vector<std::string>& to_parse);
-	void parse_value(const std::string& vlue, ds_common::NetList* netlist);
+	bool parse_value(const std::string& vlue, ds_common::NetList* netlist);
+	void add_ports(const std::string& value, const std::string& type, ds_common::NetList* netlist);
+
+	enum LogicGate {
+		AND,
+		OR,
+		NOT,
+		NAND,
+		NOR,
+		BUF,
+		XOR
+	};
 }
 
 #endif /* LIBRARY_H_ */

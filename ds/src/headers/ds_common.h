@@ -105,14 +105,14 @@ namespace ds_common {
 	};
 
 	class Gate {
-	private:
+	protected:
 		std::string name;
 		std::vector<PortBit*> inputs;
 		std::vector<PortBit*> outputs;
 	public:
 		std::string get_instance_name() const {return name;}
-		const std::vector<PortBit*>& get_inputs()const {return inputs;}
-		const std::vector<PortBit*>& get_outputs()const {return outputs;}
+		const std::vector<PortBit*>* get_inputs()const {return &inputs;}
+		const std::vector<PortBit*>* get_outputs()const {return &outputs;}
 		void add_port(PortBit * const pb){
 			if (pb->get_type() == IN)
 				inputs.push_back(pb);
@@ -143,13 +143,13 @@ namespace ds_common {
 
 	class NetList : public Gate{
 	private:
-		std::string name;
 		std::vector<Gate*> gates;
 		std::vector<Signal*> signals;
 		int signal_counter;
 		std::list<Signal*> own_signals;
 
 	public:
+		void set_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
 		void add_gate(Gate * const g){gates.push_back(g);}
 		void remove_gate(Gate * const g){
@@ -184,6 +184,10 @@ namespace ds_common {
 					std::bind1st(std::mem_fun(&Signal::add_receiver), a));
 		}
 		~NetList(){}
+	};
+
+	class GateDef {
+
 	};
 
 }

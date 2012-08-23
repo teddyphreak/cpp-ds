@@ -13,7 +13,8 @@ using namespace std;
 
 int main() {
 	cout << "Hello  1World" << endl; // prints Hello World
-	ds_common::PortType t;
-	ds_library::Library l;
+	string file = "../p45k.v";
+	string top ="top";
+	ds_library::import(file,top);
 	return 0;
 }
