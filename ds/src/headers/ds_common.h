@@ -16,7 +16,7 @@
 
 namespace ds_common {
 
-	typedef long int64;
+	typedef unsigned long int64;
 	class Signal;
 	class Gate;
 

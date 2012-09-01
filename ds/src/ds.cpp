@@ -9,6 +9,7 @@
 #include <iostream>
 #include "ds_common.h"
 #include "ds_library.h"
+#include "ds_lg.h"
 using namespace std;
 
 int main() {
