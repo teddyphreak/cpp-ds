@@ -8,10 +8,12 @@
 #ifndef DS_STRUCTURAL_H_
 #define DS_STRUCTURAL_H_
 
+#include <iostream>
 #include <string>
 #include <list>
 #include <algorithm>
 #include <vector>
+#include <map>
 #include <boost/bind.hpp>
 #include <boost/checked_delete.hpp>
 
@@ -23,6 +25,10 @@ namespace ds_structural {
 
 	class Signal;
 	class Gate;
+	class PortBit;
+
+	typedef std::vector<PortBit*> port_container;
+	typedef std::map<std::string,std::string> function_map_t;
 
 	enum PortType {
 		DIR_IN,
@@ -112,18 +118,30 @@ namespace ds_structural {
 	protected:
 		std::string name;
 		std::string type;
-		std::vector<PortBit*> inputs;
-		std::vector<PortBit*> outputs;
-		std::map<std::string, std::string> mappings;
+		port_container inputs;
+		port_container outputs;
+		function_map_t mappings;
 		ds_lg::LGNode* lgn;
 	public:
 		Gate():name(),type(),lgn(0){}
-		void set_type(const std::string& n){name = n;}
+		void set_type(const std::string& n){type = n;}
+		std::string get_type() const {return type;}
+		void set_instance_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
-		const std::vector<PortBit*>* get_inputs()const {return &inputs;}
-		const std::vector<PortBit*>* get_outputs()const {return &outputs;}
+		const port_container* get_inputs()const {return &inputs;}
+		const port_container* get_outputs()const {return &outputs;}
 		void add_mapping(const std::string& formal, const std::string& n) {mappings[formal] = n;}
+		std::string get_mapping(const std::string& name) const{
+			function_map_t::const_iterator it = mappings.find(name);
+			if (it!=mappings.end()){
+				return it->second;
+			}
+			return std::string("");
+		}
 		void set_lgn(ds_lg::LGNode* n){lgn = n;}
+		ds_lg::LGNode* get_lgn()const{return lgn;}
+		std::size_t get_num_ports() const {return inputs.size() + outputs.size();}
+		Gate* clone();
 		void add_port(PortBit * const pb){
 			if (pb->get_type() == DIR_IN)
 				inputs.push_back(pb);
@@ -131,17 +149,16 @@ namespace ds_structural {
 				outputs.push_back(pb);
 		}
 		void remove_port(PortBit * const pb){
-			std::vector<PortBit*>* ports = &outputs;
+			port_container* ports = &outputs;
 			if (pb->get_type()==DIR_IN)
 				ports = &inputs;
-			typedef std::vector<PortBit*>::iterator IT;
-			IT port = std::find_if(ports->begin(), ports->end(), inst_eq_p<PortBit*>(pb));
-			ports->erase(port);
+			port_container::iterator port = std::find_if(ports->begin(), ports->end(), inst_eq_p<PortBit*>(pb));
+			if (port != ports->end())
+				ports->erase(port);
 		}
 
 		PortBit* find_port_by_name(const std::string& n){
-			typedef std::vector<PortBit*>::iterator IT;
-			IT port = std::find_if(inputs.begin(), inputs.end(), name_eq_p<PortBit*>(n));
+			port_container::iterator port = std::find_if(inputs.begin(), inputs.end(), name_eq_p<PortBit*>(n));
 			if (port != inputs.end())
 				return *port;
 			port = std::find_if(outputs.begin(), outputs.end(), name_eq_p<PortBit*>(n));
@@ -178,9 +195,9 @@ namespace ds_structural {
 		void remove_signal(Signal * const s){
 			std::remove_if(signals.begin(),signals.end(),inst_eq_p<Signal*>(s));
 		}
-		Signal* find_signal(Signal * const name){
+		Signal* find_signal(const std::string& name){
 			typedef std::vector<Signal*>::iterator IT;
-			IT s = std::find_if(signals.begin(), signals.end(), inst_eq_p<Signal*>(name));
+			IT s = std::find_if(signals.begin(), signals.end(), name_eq_p<Signal*>(name));
 			return *s;
 		}
 		Signal* create_signal(){
@@ -203,11 +220,6 @@ namespace ds_structural {
 			std::for_each(own_signals.begin(), own_signals.end(), boost::checked_deleter<Signal>());
 		}
 	};
-
-	class GateDef {
-
-	};
-
 }
 
 #endif
