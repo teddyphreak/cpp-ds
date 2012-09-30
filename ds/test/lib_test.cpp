@@ -10,6 +10,7 @@
 #include "ds_library.h"
 #include <iostream>
 #include <boost/spirit/include/qi.hpp>
+#include "ds_workspace.h"
 
 	BOOST_AUTO_TEST_CASE( lib_test_open ) {
 		using namespace ds_library;
@@ -109,30 +110,169 @@
 		delete(g);
 	}
 
+	BOOST_AUTO_TEST_CASE(netlist_import) {
+
+		using namespace ds_library;
+		using namespace ds_structural;
+		using namespace ds_workspace;
+
+		LibraryFactory *factory = LibraryFactory::getInstance();
+		Library *defaultLib = factory->loadLibrary();
+		const char* d = getenv("DS");
+		std::string path = d?d:"";
+
+		Workspace *wp = ds_workspace::Workspace::get_workspace();
+		wp->add_library(defaultLib);
+
+		std::string file = path + "/files/p45k.v";
+		std::cout << "... importing " << file << std::endl;
+		ds_structural::NetList *nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p100k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p141k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p239k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p259k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p267k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p269k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p279k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p286k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p295k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+
+		file = path + "/files/p330k.v";
+		std::cout << "... importing " << file << std::endl;
+		nl = ds_library::import(file, "top", wp);
+		BOOST_CHECK(nl!=0);
+		delete nl;
+	}
+
 	BOOST_AUTO_TEST_CASE(verilog_parser) {
 		using namespace ds_library;
 
 		const char* d = getenv("DS");
 		std::string path = d?d:"";
-		path += "/files/p45k.v";
-		std::ifstream input(path.c_str());
-		std::stringstream ss;
-		std::string line;
-		BOOST_REQUIRE(input.is_open());
 
-		while (!input.eof()){
-			std::getline(input ,line);
-			ss << line << ' ';
-		}
-		input.close();
-
-		typedef std::string::iterator IT;
+		std::string file = path + "/files/p45k.v";
+		std::cout << "...parsing " << file << std::endl;
 		std::vector<ds_library::parse_netlist> netlists;
-		ds_library::parse_netlist netlist;
-		ds_library::nxp_verilog_parser<IT> p;
+		bool parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size() == 2);
+		netlists.clear();
 
-		std::string nl_str = ss.str();
-		using boost::spirit::ascii::space;
-		bool parse =  boost::spirit::qi::phrase_parse(nl_str.begin(), nl_str.end(), p, space, netlists);
-		BOOST_REQUIRE(parse);
+		file = path + "/files/p100k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p141k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p239k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p259k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p267k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p269k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p279k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p286k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p295k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
+
+		file = path + "/files/p330k.v";
+		std::cout << "... parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
+		BOOST_CHECK(parse);
+		BOOST_CHECK(netlists.size()>0);
+		netlists.clear();
 	}
+

@@ -7,9 +7,11 @@
 
 #include "ds_library.h"
 #include "ds_common.h"
+#include "ds_workspace.h"
 #include <iostream>
 #include <fstream>
 #include <errno.h>
+#include <stack>
 #include <boost/exception/all.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_core.hpp>
@@ -18,8 +20,11 @@
 #include <boost/lambda/algorithm.hpp>
 #include <boost/lambda/bind.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/topological_sort.hpp>
 
 ds_library::LibraryFactory* ds_library::LibraryFactory::instance = 0;
+
 void ds_library::Library::load_nodes(){
 
 	using namespace ds_lg;
@@ -207,18 +212,11 @@ void ds_library::Library::close(){
 	prototypes.clear();
 }
 
-ds_structural::NetList* ds_library::import(const std::string& file, const std::string& toplevel, const Library* lib){
-
-	if (file.find_last_of(".v") != file.size() - 2)
-		BOOST_THROW_EXCEPTION(parse_error()
-		<< ds_common::errmsg_info("Only verilog design supported at the moment"));
-
+bool ds_library::parse_verilog(const std::string& file, std::vector<parse_netlist>& netlists){
 	std::ifstream input(file.c_str());
 	std::string line;
 	std::stringstream ss;
-
-	ds_structural::NetList *netlist = 0;
-
+	bool parse = false;
 	if (input.is_open()){
 
 		while (!input.eof()){
@@ -229,42 +227,132 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 		input.close();
 
 		typedef std::string::iterator STR_IT;
-		std::vector<ds_library::parse_netlist> netlists;
 		ds_library::nxp_verilog_parser<STR_IT> p;
-
 		std::string nl_str = ss.str();
 		using boost::spirit::ascii::space;
-		bool parse =  boost::spirit::qi::phrase_parse(nl_str.begin(), nl_str.end(), p, space, netlists);
-		if (!parse) {
-			BOOST_THROW_EXCEPTION(parse_error()
-					<< ds_common::errmsg_info("Error parsing verilog file"));
-		}
-		typedef std::vector<ds_library::parse_netlist>::iterator IT;
-		IT top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
-		if (top == netlists.end()){
-			BOOST_THROW_EXCEPTION(parse_error()
-					<< ds_common::errmsg_info("Design " + toplevel + " not found"));
-		}
-
-
-
+		parse =  boost::spirit::qi::phrase_parse(nl_str.begin(), nl_str.end(), p, space, netlists);
 	} else {
 		BOOST_THROW_EXCEPTION(file_read_error() << boost::errinfo_errno(errno));
 	}
+	return parse;
+}
+
+ds_structural::NetList* ds_library::import(const std::string& file, const std::string& toplevel, ds_workspace::Workspace *workspace){
+
+	if (file.find_last_of(".v") != file.size() - 1){
+		BOOST_THROW_EXCEPTION(parse_error()
+		<< ds_common::errmsg_info("Only verilog design supported at the moment"));
+	}
+
+	ds_structural::NetList *netlist = 0;
+	std::vector<parse_netlist> netlists;
+	bool parse = ds_library::parse_verilog(file, netlists);
+
+	if (!parse) {
+		BOOST_THROW_EXCEPTION(parse_error()
+				<< ds_common::errmsg_info("Error parsing verilog file"));
+	}
+
+	typedef std::vector<ds_library::parse_netlist>::iterator IT;
+	IT top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
+	if (top == netlists.end()){
+		BOOST_THROW_EXCEPTION(parse_error()
+				<< ds_common::errmsg_info("Design " + toplevel + " not found"));
+	}
+
+	typedef std::pair<std::string,std::size_t> dependency_type;
+	dependency_visitor dependency_v(workspace);
+	dependency_type top_level = dependency_type(top->nl_name, top->ports.size());
+	dependency_v.design = top_level;
+	std::set<dependency_type> evaluated;
+	BOOST_FOREACH( ds_library::verilog_instance instance, top->instances)
+	{
+		boost::apply_visitor(dependency_v, instance);
+	}
+	evaluated.insert(top_level);
+	BOOST_FOREACH( dependency_type dp, dependency_v.dependencies )
+	{
+		std::cout << "dependencies "  << dp.first << dp.second << std::endl;
+	}
+
+	if (dependency_v.dependencies.size()==0){
+		netlist = ds_library::convert(*top, workspace);
+	} else {
+		std::set<dependency_type> to_evaluate;
+		to_evaluate.insert(dependency_v.dependencies.begin(), dependency_v.dependencies.end());
+		dependency_v.dependencies.clear();
+		while (to_evaluate.size()!=0){
+
+			BOOST_FOREACH(dependency_type dep, to_evaluate)
+			{
+				IT parsed = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == dep.first);
+				if (parsed == netlists.end()){
+					std::cout << "Design " + toplevel + " not found" << std::endl;
+					BOOST_THROW_EXCEPTION(parse_error()	<< ds_common::errmsg_info("Design " + toplevel + " not found"));
+				}
+				if (parsed->ports.size() != dep.second){
+					BOOST_THROW_EXCEPTION(parse_error()	<< ds_common::errmsg_info("Design " + toplevel + " not found"));
+				}
+				dependency_v.design = dep;
+				BOOST_FOREACH(ds_library::verilog_instance instance, parsed->instances)
+				{
+					boost::apply_visitor(dependency_v, instance);
+				}
+				BOOST_FOREACH(dependency_type new_dep, dependency_v.dependencies)
+				{
+					typedef std::set<dependency_type>::iterator DEP_IT;
+					DEP_IT dep_it = evaluated.find(new_dep);
+					if (dep_it == evaluated.end()){
+						to_evaluate.insert(*dep_it);
+					}
+				}
+			}
+		}
+		using namespace boost;
+		typedef adjacency_list<vecS, vecS, bidirectionalS, std::pair<std::string, int> > Graph;
+		typedef std::multimap<std::pair<std::string, int> , std::pair<std::string, int> >::iterator DEP_MULTI;
+		std::map<dependency_type, int> node_map;
+     	Graph g(evaluated.size());
+     	int node_counter = 0;
+     	std::vector<dependency_type> evaluated_indexed(evaluated.size());
+     	evaluated_indexed.insert(evaluated_indexed.end(), evaluated.begin(), evaluated.end());
+     	for (std::set<dependency_type>::iterator it=evaluated.begin();it!=evaluated.end();it++){
+     		node_map[*it] = node_counter++;
+     	}
+     	typedef graph_traits<Graph>::vertex_descriptor Vertex;
+		for (DEP_MULTI dep_multi = dependency_v.dep_map.begin(); dep_multi != dependency_v.dep_map.end();dep_multi++){
+			Vertex u, v;
+			u = vertex(node_map[dep_multi->first], g);
+			v = vertex(node_map[dep_multi->second], g);
+			add_edge(u, v, g);
+		}
+
+		std::list<Vertex>  elaboration_order;
+		topological_sort(g, std::front_inserter(elaboration_order));
+		for (std::list<Vertex>::iterator it = elaboration_order.begin(); it != elaboration_order.end();it++){
+			int key = *it;
+			dependency_type dp = evaluated_indexed[key];
+			workspace->elaborate_netlist(dp.first, dp.second);
+
+		}
+		netlist = ds_library::convert(*top, workspace);
+	}
+
 	return netlist;
 }
 
-ds_structural::NetList* convert(ds_library::parse_netlist nl, const ds_library::Library *lib){
+ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl, ds_workspace::Workspace *workspace){
 	ds_structural::NetList *netlist = new ds_structural::NetList();
 	netlist->set_instance_name(nl.nl_name);
 	std::vector<std::string> temp_names;
 	std::vector<std::string> names;
-	ds_library::aggregate_visitor<std::vector<std::string> > visitor(temp_names);
+	ds_library::aggregate_visitor<std::vector<std::string> > aggregate_v(temp_names);
+	ds_library::instance_visitor instance_v(netlist, workspace);
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.inputs )
 	{
 		temp_names.clear();
-		boost::apply_visitor(visitor, p);
-		BOOST_FOREACH( std::string n, temp_names )
+		boost::apply_visitor(aggregate_v, p);
+		BOOST_FOREACH( std::string n, temp_names)
 		{
 			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_IN);
 			pb->setGate(netlist);
@@ -276,7 +364,7 @@ ds_structural::NetList* convert(ds_library::parse_netlist nl, const ds_library::
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.outputs )
 	{
 		temp_names.clear();
-		boost::apply_visitor(visitor, p);
+		boost::apply_visitor(aggregate_v, p);
 		BOOST_FOREACH( std::string n, temp_names )
 		{
 			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_OUT);
@@ -289,24 +377,33 @@ ds_structural::NetList* convert(ds_library::parse_netlist nl, const ds_library::
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.signals )
 	{
 		temp_names.clear();
-		boost::apply_visitor(visitor, p);
+		boost::apply_visitor(aggregate_v, p);
 		BOOST_FOREACH( std::string n, temp_names )
 		{
 			ds_structural::Signal *s = new ds_structural::Signal(n);
 			netlist->add_signal(s);
 		}
 	}
-	BOOST_FOREACH( ds_library::parse_nl_implicit_instance implicit, nl.instances )
+	BOOST_FOREACH( ds_library::verilog_instance instance, nl.instances )
 	{
-		std::string type = implicit.type;
-		std::size_t numPorts = implicit.ports.size();
-		ds_structural::Gate *g = lib->getGate(type,numPorts);
+		boost::apply_visitor(instance_v, instance);
+	}
+	return netlist;
+}
+
+void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implicit_instance& implicit){
+	std::string type = implicit.type;
+	std::size_t numPorts = implicit.ports.size();
+	ds_structural::Gate *g = wp->get_gate(type,numPorts);
+	if (g!=0){
 		g->set_instance_name(implicit.name);
 		netlist->add_gate(g);
-		typedef std::vector<std::string>::iterator PORT_IT;
-		std::vector<ds_structural::PortBit*> all_ports;
-		std::for_each(g->get_inputs()->begin(),g->get_inputs()->end(), boost::bind(&std::vector<ds_structural::PortBit*>::push_back, all_ports, _1));
-		std::for_each(g->get_outputs()->begin(),g->get_outputs()->end(), boost::bind(&std::vector<ds_structural::PortBit*>::push_back, all_ports, _1));
+		typedef std::vector<std::string>::const_iterator PORT_IT;
+		ds_structural::port_container all_ports;
+		ds_structural::port_container::iterator port_iterator = all_ports.end();
+		all_ports.insert(port_iterator, g->get_inputs()->begin(),g->get_inputs()->end());
+		port_iterator = all_ports.end();
+		all_ports.insert(port_iterator, g->get_outputs()->begin(),g->get_outputs()->end());
 		std::vector<ds_structural::PortBit*>::iterator pi = all_ports.begin();
 		for (PORT_IT it = implicit.ports.begin();it!=implicit.ports.end();it++){
 			ds_structural::PortBit* pb = *pi;
@@ -317,13 +414,72 @@ ds_structural::NetList* convert(ds_library::parse_netlist nl, const ds_library::
 				signal = new ds_structural::Signal(signal_name);
 				netlist->add_signal(signal);
 			}
-			signal->add_receiver(pb);
+			signal->add_port(pb);
 		}
+	} else {
+		ds_structural::NetList *nl = wp->get_netlist(type,numPorts);
+		typedef std::vector<std::string>::const_iterator PORT_IT;
+		ds_structural::port_container all_ports;
+		ds_structural::port_container::iterator port_iterator = all_ports.end();
+		all_ports.insert(port_iterator, g->get_outputs()->begin(),g->get_outputs()->end());
+		port_iterator = all_ports.end();
+		all_ports.insert(port_iterator, nl->get_inputs()->begin(),nl->get_inputs()->end());
+		std::vector<ds_structural::PortBit*>::iterator pi = all_ports.begin();
+		for (PORT_IT it = implicit.ports.begin();it!=implicit.ports.end();it++){
+			ds_structural::PortBit* pb = *pi;
+			pi++;
+			std::string signal_name = *it;
+			ds_structural::Signal *signal = netlist->find_signal(signal_name);
+			if (signal==0){
+				signal = new ds_structural::Signal(signal_name);
+				netlist->add_signal(signal);
+			}
+			ds_structural::Signal *internal = pb->get_signal();
+			typedef std::list<ds_structural::PortBit*>::iterator INTER_IT;
+			for (INTER_IT inter_it=internal->ports.begin();inter_it!= internal->ports.end();inter_it++){
+				ds_structural::PortBit *p = *inter_it;
+				p->set_signal(signal);
+			}
+		}
+		for (gate_map_t::iterator gi = nl->gates.begin();gi!= nl->gates.end();gi++){
+			ds_structural::Gate *gate = gi->second;
+			gate->set_instance_name(implicit.name + "/" + gate->get_instance_name());
+			netlist->add_gate(gate);
+		}
+		nl->gates.clear();
+
+		for (ds_structural::signal_map_t::iterator si = nl->signals.begin();si!=nl->signals.end();si++){
+			ds_structural::Signal *s = si->second;
+			s->set_name(implicit.name + "/" + s->get_instance_name());
+			netlist->add_signal(s);
+		}
+		nl->signals.clear();
+
+		for (ds_structural::signal_map_t::iterator si = nl->own_signals.begin();si!=nl->own_signals.end();si++){
+			ds_structural::Signal *s = si->second;
+			s->set_name(implicit.name + "/" + s->get_instance_name());
+			netlist->add_signal(s);
+		}
+		nl->own_signals.clear();
+
+		delete nl;
 	}
-	return netlist;
 }
 
-template<typename Iterator>
-ds_structural::NetList* ds_library::import_verilog(Iterator begin, Iterator end, const std::string& toplevel, const ds_library::Library* lib){
-	return 0;
+void ds_library::instance_visitor::operator()(const ds_library::parse_nl_explicit_instance& instance) {
+
 }
+
+void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_implicit_instance& implicit){
+	typedef std::pair<std::string,int> dependency_type;
+	if (!wp->is_defined(implicit.type, implicit.ports.size())){
+		dependency_type dep(implicit.type,implicit.ports.size());
+		dep_map.insert(std::pair<dependency_type, dependency_type>(design, dep));
+		dependencies.insert(dep);
+	}
+}
+
+void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_explicit_instance& instance) {
+
+}
+

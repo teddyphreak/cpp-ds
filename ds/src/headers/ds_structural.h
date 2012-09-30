@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <string>
+#include <set>
 #include <list>
 #include <algorithm>
 #include <vector>
@@ -21,6 +22,10 @@ namespace ds_lg {
 	class LGNode;
 }
 
+namespace ds_library {
+	struct instance_visitor;
+}
+
 namespace ds_structural {
 
 	class Signal;
@@ -29,6 +34,8 @@ namespace ds_structural {
 
 	typedef std::vector<PortBit*> port_container;
 	typedef std::map<std::string,std::string> function_map_t;
+	typedef std::map<std::string, Gate*> gate_map_t;
+	typedef std::map<std::string, Signal*> signal_map_t;
 
 	enum PortType {
 		DIR_IN,
@@ -50,7 +57,7 @@ namespace ds_structural {
 		void setGate(Gate * const g){gate = g;}
 		void disconnect(){signal = 0;}
 		Gate* get_gate() const{return gate;}
-		std::string get_instance_name() const{return name;}
+		std::string get_instance_name() const {return name;}
 		void set_signal(Signal* const s){signal = s;}
 		Signal* get_signal() const {return signal;}
 		PortType get_type() const {return type;}
@@ -58,19 +65,20 @@ namespace ds_structural {
 	};
 
 	class Signal{
+		friend class ds_library::instance_visitor;
 	private:
 		std::string name;
 		std::list<PortBit*> ports;
 	public:
 		std::string get_instance_name() const {return name;}
+		void set_name(const std::string& n){name = n;}
 		Signal(const std::string& name):name(name) {}
-		void add_receiver(PortBit * const pb) {ports.push_back(pb); pb->set_signal(this);}
-		void remove_receiver(PortBit * const pb) {ports.remove(pb); pb->disconnect();}
-		const std::list<PortBit*>& get_receivers() const {return ports;}
+		void add_port(PortBit * const pb) {ports.push_back(pb); pb->set_signal(this);}
+		void remove_port(PortBit * const pb) {ports.remove(pb); pb->disconnect();}
+		const std::list<PortBit*>::const_iterator port_begin() const {return ports.begin();}
+		const std::list<PortBit*>::const_iterator port_end() const {return ports.end();}
 
 	};
-
-
 
 	template <class T> bool inst_name (const T& a1, const T& a2){
 		if (a1.get_instance_name() == a2.get_Instance_name())
@@ -82,7 +90,7 @@ namespace ds_structural {
 		std::string arg2;
 	public:
 		explicit name_eq_p(const std::string s): arg2(s){};
-		bool operator()(T& x)  {
+		bool operator()(const T& x)  {
 			return x->get_instance_name() == arg2;
 		}
 	};
@@ -91,7 +99,7 @@ namespace ds_structural {
 		T arg2;
 	public:
 		explicit inst_eq_p(const T& a): arg2(a){};
-		bool operator()(T& x)  {
+		bool operator()(const T& x)  {
 			return x->get_instance_name() == arg2->get_instance_name();
 		}
 	};
@@ -122,14 +130,15 @@ namespace ds_structural {
 		port_container outputs;
 		function_map_t mappings;
 		ds_lg::LGNode* lgn;
+		void copy(Gate *g);
 	public:
 		Gate():name(),type(),lgn(0){}
 		void set_type(const std::string& n){type = n;}
 		std::string get_type() const {return type;}
 		void set_instance_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
-		const port_container* get_inputs()const {return &inputs;}
-		const port_container* get_outputs()const {return &outputs;}
+		const port_container* get_inputs() const {return &inputs;}
+		const port_container* get_outputs() const {return &outputs;}
 		void add_mapping(const std::string& formal, const std::string& n) {mappings[formal] = n;}
 		std::string get_mapping(const std::string& name) const{
 			function_map_t::const_iterator it = mappings.find(name);
@@ -141,7 +150,7 @@ namespace ds_structural {
 		void set_lgn(ds_lg::LGNode* n){lgn = n;}
 		ds_lg::LGNode* get_lgn()const{return lgn;}
 		std::size_t get_num_ports() const {return inputs.size() + outputs.size();}
-		Gate* clone();
+		virtual Gate* clone();
 		void add_port(PortBit * const pb){
 			if (pb->get_type() == DIR_IN)
 				inputs.push_back(pb);
@@ -174,50 +183,55 @@ namespace ds_structural {
 	};
 
 	class NetList : public Gate{
+		friend class ds_library::instance_visitor;
 	private:
-		std::vector<Gate*> gates;
-		std::vector<Signal*> signals;
+		gate_map_t gates;
+		signal_map_t signals;
 		int signal_counter;
-		std::list<Signal*> own_signals;
+		signal_map_t own_signals;
 	public:
 		void set_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
-		void add_gate(Gate * const g){gates.push_back(g);}
-		void remove_gate(Gate * const g){
-			std::remove_if(gates.begin(),gates.end(),inst_eq_p<Gate*>(g));
+		void add_gate(Gate * const g){gates[g->get_instance_name()]=g;}
+		void remove_gate(const Gate* g){
+			gates.erase(g->get_instance_name());
 		}
+		NetList* clone();
 		Gate* find_gate(const std::string& name){
-			typedef std::vector<Gate*>::iterator IT;
-			IT g = std::find_if(gates.begin(), gates.end(), name_eq_p<Gate*>(name));
-			return *g;
+			gate_map_t::iterator it;
+			it = gates.find(name);
+			if (it!=gates.end())
+				return it->second;
+			return 0;
 		}
-		void add_signal(Signal * const s){signals.push_back(s);}
-		void remove_signal(Signal * const s){
-			std::remove_if(signals.begin(),signals.end(),inst_eq_p<Signal*>(s));
+		void add_signal(Signal * const s){signals[s->get_instance_name()]= s;}
+		void remove_signal(Signal* s){
+			signals.erase(s->get_instance_name());
 		}
 		Signal* find_signal(const std::string& name){
-			typedef std::vector<Signal*>::iterator IT;
-			IT s = std::find_if(signals.begin(), signals.end(), name_eq_p<Signal*>(name));
-			return *s;
+			signal_map_t::iterator it = signals.find(name);
+			if (it != signals.end())
+				return it->second;
+			return 0;
 		}
 		Signal* create_signal(){
 			static int counter = 0;
 			std::string name = "ds_" + counter++;
 			Signal* s = new Signal(name);
-			own_signals.push_back(s);
+			own_signals[name] = s;
 			return s;
 		}
-		void join(Signal* a, const Signal& v){
-			void (Signal::*fptr) (PortBit* pb) = &Signal::add_receiver;
-			(a->*fptr)(0);
-			std::for_each(v.get_receivers().begin(),
-					v.get_receivers().end(),
-					std::bind1st(std::mem_fun(&Signal::add_receiver), a));
-		}
+
 		~NetList(){
-			std::for_each(gates.begin(), gates.end(), boost::checked_deleter<Gate>());
-			std::for_each(signals.begin(), signals.end(), boost::checked_deleter<Signal>());
-			std::for_each(own_signals.begin(), own_signals.end(), boost::checked_deleter<Signal>());
+			for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
+				delete it->second;
+			}
+			for (signal_map_t::iterator it=signals.begin();it!=signals.end();it++){
+				delete it->second;
+			}
+			for (signal_map_t::iterator it=own_signals.begin();it!=own_signals.end();it++){
+				delete it->second;
+			}
 		}
 	};
 }

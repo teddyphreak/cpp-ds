@@ -28,6 +28,10 @@
 #include <boost/fusion/include/io.hpp>
 #include <iostream>
 
+namespace ds_workspace {
+	class Workspace;
+}
+
 namespace ds_library {
 
 	struct file_read_error: virtual boost::exception, virtual std::exception { };
@@ -44,6 +48,24 @@ namespace ds_library {
 
 	friend class LibraryFactory;
 	public:
+
+	bool has_gate(const std::string& name, const std::size_t ports) {
+		gate_map_t::const_iterator it = gate_map.find(name);
+		bool found = false;
+		if (it != gate_map.end()){
+			ds_structural::Gate *c = it->second;
+			if (c->get_num_ports() == ports)
+				found = true;
+		}
+		if (!found){
+			function_map::const_iterator it = functions.find(name);
+			if (it != functions.end()){
+				found = true;
+			}
+		}
+		return found;
+	}
+
 	ds_structural::Gate* getGate(const std::string& name, const std::size_t ports) const {
 		ds_structural::Gate* g = 0;
 		gate_map_t::const_iterator it = gate_map.find(name);
@@ -122,7 +144,7 @@ namespace ds_library {
 		}
 	};
 
-	ds_structural::NetList* import(const std::string& file, const std::string& toplevel, const Library* lib);
+	ds_structural::NetList* import(const std::string& file, const std::string& toplevel, ds_workspace::Workspace* workspace);
 
 	template<typename Iterator>
 	ds_structural::NetList* import_verilog(Iterator begin, Iterator end, const std::string& toplevel, const Library* lib);
@@ -147,7 +169,15 @@ namespace ds_library {
 		std::vector<std::string> ports;
 	};
 
-	typedef boost::variant<ds_library::parse_nl_aggregate, std::string> verilog_declaration;
+	struct parse_nl_explicit_instance
+	{
+		std::string type;
+		std::string name;
+		std::map<std::string, std::string> ports;
+	};
+
+	typedef boost::variant<parse_nl_aggregate, std::string> verilog_declaration;
+	typedef boost::variant<parse_nl_implicit_instance, parse_nl_explicit_instance> verilog_instance;
 
 	struct parse_netlist
 	{
@@ -157,7 +187,7 @@ namespace ds_library {
 		std::vector<verilog_declaration> outputs;
 		std::vector<verilog_declaration> signals;
 		std::vector<parse_nl_assignment> assignments;
-		std::vector<parse_nl_implicit_instance> instances;
+		std::vector<verilog_instance> instances;
 	};
 
 	struct parse_lib_node
@@ -198,6 +228,13 @@ BOOST_FUSION_ADAPT_STRUCT(
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
+    ds_library::parse_nl_explicit_instance,
+    (std::string, type)
+    (std::string, name)
+    (ds_library::fusion_map, ports)
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
     ds_library::parse_nl_assignment,
     (std::string, lhs)
     (std::string, rhs)
@@ -211,7 +248,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 	(std::vector<ds_library::verilog_declaration>, outputs)
 	(std::vector<ds_library::verilog_declaration>, signals)
 	(std::vector<ds_library::parse_nl_assignment>, assignments)
-	(std::vector<ds_library::parse_nl_implicit_instance>, instances)
+	(std::vector<ds_library::verilog_instance>, instances)
 )
 
 namespace ds_library {
@@ -219,7 +256,6 @@ namespace ds_library {
 	namespace ascii = boost::spirit::ascii;
 
 	template <typename Iterator>
-	//struct nxp_verilog_parser : qi::grammar<Iterator, ds_library::parse_netlist(), ascii::space_type >
 	struct nxp_verilog_parser : qi::grammar<Iterator,std::vector<ds_library::parse_netlist>(), ascii::space_type>
 	{
 		nxp_verilog_parser() : nxp_verilog_parser::base_type(start, "netlists")
@@ -260,7 +296,7 @@ namespace ds_library {
 						| ("output" >> declaration			[push_back(at_c<3>(_val), _1)] % ',')
 						| ("wire"   >> declaration 			[push_back(at_c<4>(_val), _1)] % ',')
 						| (assign							[push_back(at_c<5>(_val), _1)])
-						| (!lit("endmodule") >>  implicit 	[push_back(at_c<6>(_val), _1)])
+						| (!lit("endmodule") >>  instance 	[push_back(at_c<6>(_val), _1)])
 						)
 						>> lit(';')
 					)
@@ -271,7 +307,10 @@ namespace ds_library {
 			aggregate = name >> lit('[') >> int_ >> lit(':') >> int_>> lit(']');
 			declaration = (aggregate | name ) [_val = _1];
 			assign = "assign" >> name >> lit('=') >> name;
-			implicit = name_ns >> name >> lit('(') >> ports >> lit(')');
+			instance = implicit_i | explicit_i;
+			implicit_i = name_ns >> name >> lit('(') >> ports >> lit(')');
+			explicit_i = name_ns >> name >> lit('(') >> binding % ',' >> lit(')');
+			binding = lit('.') >> name >> lit('(') >> name >> lit(')');
 			name_ns = no_skip[omit[*ascii::space] >> (qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9")) >> omit[*ascii::space]];
 
 			name.name("name");
@@ -279,7 +318,7 @@ namespace ds_library {
 			aggregate.name("aggregate");
 			declaration.name("declaration");
 			assign.name("name");
-			implicit.name("implicit");
+			implicit_i.name("implicit");
 			start.name("start");
 			name_ns.name("name_ns");
 			netlist.name("netlist");
@@ -287,10 +326,13 @@ namespace ds_library {
 
 		qi::rule<Iterator, std::string(), ascii::space_type> name, name_ns;
 		qi::rule<Iterator, std::vector<std::string>(), ascii::space_type> ports;
+		qi::rule<Iterator, std::pair<std::string,std::string>(), ascii::space_type> binding;
 		qi::rule<Iterator, ds_library::parse_nl_aggregate(), ascii::space_type> aggregate;
 		qi::rule<Iterator, ds_library::verilog_declaration(), ascii::space_type> declaration;
 		qi::rule<Iterator, ds_library::parse_nl_assignment(), ascii::space_type> assign;
-		qi::rule<Iterator, ds_library::parse_nl_implicit_instance(), ascii::space_type> implicit;
+		qi::rule<Iterator, ds_library::parse_nl_implicit_instance(), ascii::space_type> implicit_i;
+		qi::rule<Iterator, ds_library::parse_nl_explicit_instance(), ascii::space_type> explicit_i;
+		qi::rule<Iterator, ds_library::verilog_instance(), ascii::space_type> instance;
 		qi::rule<Iterator, ds_library::parse_netlist(), ascii::space_type> netlist;
 		qi::rule<Iterator, std::vector<ds_library::parse_netlist>(), ascii::space_type> start;
 
@@ -419,7 +461,7 @@ namespace ds_library {
 		XOR
 	};
 
-	ds_structural::NetList* convert(ds_library::parse_netlist nl, ds_library::Library);
+	ds_structural::NetList* convert(const ds_library::parse_netlist& nl, ds_workspace::Workspace *workspace);
 
 	template<typename Container>
 	struct aggregate_visitor : boost::static_visitor<void> {
@@ -428,11 +470,11 @@ namespace ds_library {
 
 		aggregate_visitor(const Container& c){container = c;}
 
-		void operator()(std::string s){
+		void operator()(const std::string& s){
 	           container.push_back(s);
 		}
 
-		void operator()(ds_library::parse_nl_aggregate s){
+		void operator()(const ds_library::parse_nl_aggregate& s){
 			int low  = s.left > s.right ? s.right : s.left;
 			int high = s.left < s.right ? s.right : s.left;
 			for (int i=low;i<=high;i++){
@@ -456,6 +498,36 @@ namespace ds_library {
 		}
 	};
 
+	struct instance_visitor : boost::static_visitor<void> {
+
+		ds_structural::NetList *netlist;
+		ds_workspace::Workspace *wp;
+
+
+		instance_visitor(ds_structural::NetList *n, ds_workspace::Workspace *w):netlist(n),wp(w) {}
+
+		void operator()(const ds_library::parse_nl_explicit_instance& instance);
+
+		void operator()(const ds_library::parse_nl_implicit_instance& implicit);
+	};
+
+	struct dependency_visitor : boost::static_visitor<void> {
+
+		std::multimap<std::pair<std::string, int> , std::pair<std::string, int> > dep_map;
+		std::set<std::pair<std::string, int> >dependencies;
+		std::pair<std::string, int> design;
+		ds_workspace::Workspace *wp;
+
+		dependency_visitor(ds_workspace::Workspace *w):wp(w) {}
+
+		void operator()(const ds_library::parse_nl_explicit_instance& instance);
+
+		void operator()(const ds_library::parse_nl_implicit_instance& implicit);
+	};
+
+	bool parse_verilog(const std::string& name, std::vector<parse_netlist>& netlists);
 }
+
+
 
 #endif /* LIBRARY_H_ */
