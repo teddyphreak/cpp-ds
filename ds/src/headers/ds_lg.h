@@ -71,6 +71,8 @@ namespace ds_lg {
 	inline int64 f_xnor8(int64_cpc a, int64_cpc b, int64_cpc c, int64_cpc d, int64_cpc e, int64_cpc f, int64_cpc g, int64_cpc h){ return ~(*a ^ *b ^ *c ^ *d ^ *e ^ *f ^ *g ^ *h );}
 	inline int64 f_xor8(int64_cpc a, int64_cpc b, int64_cpc c, int64_cpc d, int64_cpc e, int64_cpc f, int64_cpc g, int64_cpc h){ return *a ^ *b ^ *c ^ *d ^ *e ^ *f ^ *g ^ *h;}
 
+	inline int64 f_mux2(int64_cpc a, int64_cpc b, int64_cpc c){ return (*a & ~(*c)) | (*b & *c);}
+
 	class LGNode {
 	public:
 		ds_structural::Gate *gate;

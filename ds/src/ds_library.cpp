@@ -142,6 +142,9 @@ void ds_library::Library::load_nodes(){
 	node = new LGNode8I("xnor8",f_xnor8);
 	list.push_back(node);
 
+	node = new LGNode3I("mux2",f_mux2);
+	list.push_back(node);
+
 	typedef std::list<ds_lg::LGNode*>::iterator IT;
 	for (IT it=list.begin();it!=list.end();it++){
 		LGNode *n = *it;
@@ -254,6 +257,12 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 	}
 
 	typedef std::vector<ds_library::parse_netlist>::iterator IT;
+
+	BOOST_FOREACH( parse_netlist pl, netlists )
+	{
+		std::cout << "designs "  << pl.nl_name << std::endl;
+	}
+
 	IT top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
 	if (top == netlists.end()){
 		BOOST_THROW_EXCEPTION(parse_error()
@@ -374,6 +383,20 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 			netlist->add_signal(s);
 		}
 	}
+	BOOST_FOREACH( ds_library::verilog_declaration p, nl.inouts )
+	{
+		temp_names.clear();
+		boost::apply_visitor(aggregate_v, p);
+		BOOST_FOREACH( std::string n, temp_names )
+		{
+			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_INOUT);
+			pb->setGate(netlist);
+			netlist->add_port(pb);
+			ds_structural::Signal *s = new ds_structural::Signal(n);
+			netlist->add_signal(s);
+		}
+	}
+
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.signals )
 	{
 		temp_names.clear();

@@ -124,71 +124,89 @@
 		Workspace *wp = ds_workspace::Workspace::get_workspace();
 		wp->add_library(defaultLib);
 
-		std::string file = path + "/files/p45k.v";
-		std::cout << "... importing " << file << std::endl;
-		ds_structural::NetList *nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+		try {
 
-		file = path + "/files/p100k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			std::string file = path + "/files/p45k.v";
+			std::cout << "... importing " << file << std::endl;
+			ds_structural::NetList *nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p141k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p100k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p239k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p141k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p259k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p239k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "p239k", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p267k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p259k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "p259k", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p269k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p267k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p279k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p269k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p286k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p279k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p295k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p286k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
 
-		file = path + "/files/p330k.v";
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		BOOST_CHECK(nl!=0);
-		delete nl;
+			file = path + "/files/p295k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
+
+			file = path + "/files/p330k.v";
+			std::cout << "... importing " << file << std::endl;
+			nl = ds_library::import(file, "top", wp);
+			BOOST_CHECK(nl!=0);
+			BOOST_ASSERT(nl->check_netlist());
+			delete nl;
+
+		} catch (boost::exception& e){
+			 if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) )
+				 std::cerr << "Error: " << *mi;
+		}
 	}
 
 	BOOST_AUTO_TEST_CASE(verilog_parser) {
@@ -196,11 +214,13 @@
 
 		const char* d = getenv("DS");
 		std::string path = d?d:"";
-
-		std::string file = path + "/files/p45k.v";
-		std::cout << "...parsing " << file << std::endl;
 		std::vector<ds_library::parse_netlist> netlists;
-		bool parse = parse_verilog(file, netlists);
+		bool parse = false;
+		std::string file;
+
+		file = path + "/files/p45k.v";
+		std::cout << "...parsing " << file << std::endl;
+		parse = parse_verilog(file, netlists);
 		BOOST_CHECK(parse);
 		BOOST_CHECK(netlists.size() == 2);
 		netlists.clear();
@@ -209,21 +229,21 @@
 		std::cout << "... parsing " << file << std::endl;
 		parse = parse_verilog(file, netlists);
 		BOOST_CHECK(parse);
-		BOOST_CHECK(netlists.size()>0);
+		BOOST_CHECK(netlists.size()==2);
 		netlists.clear();
 
 		file = path + "/files/p141k.v";
 		std::cout << "... parsing " << file << std::endl;
 		parse = parse_verilog(file, netlists);
 		BOOST_CHECK(parse);
-		BOOST_CHECK(netlists.size()>0);
+		BOOST_CHECK(netlists.size()==3);
 		netlists.clear();
 
 		file = path + "/files/p239k.v";
 		std::cout << "... parsing " << file << std::endl;
 		parse = parse_verilog(file, netlists);
 		BOOST_CHECK(parse);
-		BOOST_CHECK(netlists.size()>0);
+		BOOST_CHECK(netlists.size()==1);
 		netlists.clear();
 
 		file = path + "/files/p259k.v";
@@ -275,4 +295,8 @@
 		BOOST_CHECK(netlists.size()>0);
 		netlists.clear();
 	}
+
+
+
+
 

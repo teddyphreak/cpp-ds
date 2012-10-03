@@ -58,3 +58,6 @@ xnor5,xnor5,1,o1@o,5,i1@a,i2@b,i3@c,i4@d,i5@e
 xnor6,xnor6,1,o1@o,6,i1@a,i2@b,i3@c,i4@d,i5@e,i6@f
 xnor7,xnor7,1,o1@o,7,i1@a,i2@b,i3@c,i4@d,i5@e,i6@f,i7@g
 xnor8,xnor8,1,o1@o,8,i1@a,i2@b,i3@c,i4@d,i5@e,i6@f,i7@g,i8@h
+
+mux2,mux2,1,o@o,3,d0@a,d1@b,s@c
+bufif1,and2,1,o1@o,2,i1@a,i2@b

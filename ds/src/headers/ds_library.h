@@ -185,6 +185,7 @@ namespace ds_library {
 		std::vector<std::string> ports;
 		std::vector<verilog_declaration> inputs;
 		std::vector<verilog_declaration> outputs;
+		std::vector<verilog_declaration> inouts;
 		std::vector<verilog_declaration> signals;
 		std::vector<parse_nl_assignment> assignments;
 		std::vector<verilog_instance> instances;
@@ -246,6 +247,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 	(std::vector<std::string>, ports)
 	(std::vector<ds_library::verilog_declaration>, inputs)
 	(std::vector<ds_library::verilog_declaration>, outputs)
+	(std::vector<ds_library::verilog_declaration>, inouts)
 	(std::vector<ds_library::verilog_declaration>, signals)
 	(std::vector<ds_library::parse_nl_assignment>, assignments)
 	(std::vector<ds_library::verilog_instance>, instances)
@@ -294,15 +296,16 @@ namespace ds_library {
 					*(
 						  ("input"  >> declaration			[push_back(at_c<2>(_val), _1)] % ','
 						| ("output" >> declaration			[push_back(at_c<3>(_val), _1)] % ',')
-						| ("wire"   >> declaration 			[push_back(at_c<4>(_val), _1)] % ',')
-						| (assign							[push_back(at_c<5>(_val), _1)])
-						| (!lit("endmodule") >>  instance 	[push_back(at_c<6>(_val), _1)])
+						| ("inout"  >> declaration			[push_back(at_c<4>(_val), _1)] % ',')
+						| ("wire"   >> declaration 			[push_back(at_c<5>(_val), _1)] % ',')
+						| (assign							[push_back(at_c<6>(_val), _1)])
+						| (!lit("endmodule") >>  instance 	[push_back(at_c<7>(_val), _1)])
 						)
 						>> lit(';')
 					)
 					>> "endmodule";
 
-			name = qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
+			name = -lit("\\") >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9/");
 			ports = name % ',';
 			aggregate = name >> lit('[') >> int_ >> lit(':') >> int_>> lit(']');
 			declaration = (aggregate | name ) [_val = _1];
@@ -322,6 +325,25 @@ namespace ds_library {
 			start.name("start");
 			name_ns.name("name_ns");
 			netlist.name("netlist");
+			assign.name("assign");
+			implicit_i.name("implicit");
+			explicit_i.name("explicit");
+			instance.name("instance");
+
+//			debug(name);
+//			debug(ports);
+//			debug(aggregate);
+//			debug(declaration);
+//			debug(assign);
+//			debug(implicit_i);
+//			debug(start);
+//			debug(name_ns);
+//			debug(netlist);
+//			debug(assign);
+//			debug(implicit_i);
+//			debug(explicit_i);
+//			debug(instance);
+
 		}
 
 		qi::rule<Iterator, std::string(), ascii::space_type> name, name_ns;

@@ -233,7 +233,11 @@ namespace ds_structural {
 				delete it->second;
 			}
 		}
+
+		bool check_netlist();
 	};
+
+
 }
 
 #endif
