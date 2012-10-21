@@ -15,11 +15,15 @@
 #include <algorithm>
 #include <vector>
 #include <map>
+#include <stack>
 #include <boost/bind.hpp>
 #include <boost/checked_delete.hpp>
+#include "ds_common.h"
 
 namespace ds_lg {
 	class LGNode;
+	class LeveledGraph;
+
 }
 
 namespace ds_library {
@@ -36,6 +40,7 @@ namespace ds_structural {
 	typedef std::map<std::string,std::string> function_map_t;
 	typedef std::map<std::string, Gate*> gate_map_t;
 	typedef std::map<std::string, Signal*> signal_map_t;
+	typedef std::list<ds_structural::PortBit*> sp_container;
 
 	enum PortType {
 		DIR_IN,
@@ -61,6 +66,7 @@ namespace ds_structural {
 		void set_signal(Signal* const s){signal = s;}
 		Signal* get_signal() const {return signal;}
 		PortType get_type() const {return type;}
+		std::string get_qualified_name() const;
 
 	};
 
@@ -68,15 +74,16 @@ namespace ds_structural {
 		friend class ds_library::instance_visitor;
 	private:
 		std::string name;
-		std::list<PortBit*> ports;
+		sp_container ports;
 	public:
 		std::string get_instance_name() const {return name;}
 		void set_name(const std::string& n){name = n;}
 		Signal(const std::string& name):name(name) {}
 		void add_port(PortBit * const pb) {ports.push_back(pb); pb->set_signal(this);}
 		void remove_port(PortBit * const pb) {ports.remove(pb); pb->disconnect();}
-		const std::list<PortBit*>::const_iterator port_begin() const {return ports.begin();}
-		const std::list<PortBit*>::const_iterator port_end() const {return ports.end();}
+		const sp_container::const_iterator port_begin() const {return ports.begin();}
+		const sp_container::const_iterator port_end() const {return ports.end();}
+		int count_ports(){return ports.size();}
 
 	};
 
@@ -130,9 +137,12 @@ namespace ds_structural {
 		port_container outputs;
 		function_map_t mappings;
 		ds_lg::LGNode* lgn;
+		Gate* parent;
 		void copy(Gate *g);
 	public:
-		Gate():name(),type(),lgn(0){}
+		Gate():name(),type(),lgn(0), parent(0){}
+		void set_parent(Gate* p){ parent = p;}
+		Gate* get_parent () const {return parent;}
 		void set_type(const std::string& n){type = n;}
 		std::string get_type() const {return type;}
 		void set_instance_name(const std::string& n){name = n;}
@@ -189,6 +199,7 @@ namespace ds_structural {
 		signal_map_t signals;
 		int signal_counter;
 		signal_map_t own_signals;
+		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_common::int64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
 	public:
 		void set_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
@@ -221,7 +232,7 @@ namespace ds_structural {
 			own_signals[name] = s;
 			return s;
 		}
-
+		ds_lg::LeveledGraph* build_leveled_graph();
 		~NetList(){
 			for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
 				delete it->second;

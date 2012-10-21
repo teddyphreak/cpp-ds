@@ -80,13 +80,17 @@ namespace ds_library {
 				ds_lg::bi_eval func = it->second;
 				g = new ds_structural::Gate();
 				g->set_type(name);
-				g->add_port(new ds_structural::PortBit("Z", ds_structural::DIR_OUT));
+				ds_structural::PortBit *o_port = new ds_structural::PortBit("Z", ds_structural::DIR_OUT);
+				o_port->setGate(g);
+				g->add_port(o_port);
 				g->add_mapping("Z", "z");
 				char lgn_port = 'a';
 				for (std::size_t i='A';i<'A'+ports-1;i++){
 					std::string port_name;
 					port_name += (char)i;
-					g->add_port(new ds_structural::PortBit(port_name, ds_structural::DIR_IN));
+					ds_structural::PortBit *i_port = new ds_structural::PortBit(port_name, ds_structural::DIR_IN);
+					i_port->setGate(g);
+					g->add_port(i_port);
 					std::string lgn_port_name;
 					lgn_port_name += lgn_port;
 					g->add_mapping(port_name, lgn_port_name);
@@ -207,10 +211,10 @@ BOOST_FUSION_ADAPT_STRUCT(
     ds_library::parse_lib_node,
     (std::string, gate_name)
     (std::string, node_name)
-    (int, inputs)
-    (ds_library::fusion_map, i_mapping)
     (int, outputs)
     (ds_library::fusion_map, o_mapping)
+    (int, inputs)
+    (ds_library::fusion_map, i_mapping)
     (bool, flexible)
 )
 
@@ -485,15 +489,18 @@ namespace ds_library {
 
 	ds_structural::NetList* convert(const ds_library::parse_netlist& nl, ds_workspace::Workspace *workspace);
 
-	template<typename Container>
 	struct aggregate_visitor : boost::static_visitor<void> {
 
-		Container container;
+		aggregate_visitor(ds_structural::NetList *nl, const ds_structural::PortType& pt):create_port(true), netlist(nl), type(pt){}
 
-		aggregate_visitor(const Container& c){container = c;}
+		void set_port_type(const ds_structural::PortType& t){
+			type = t;
+		}
 
-		void operator()(const std::string& s){
-	           container.push_back(s);
+		bool create_port;
+
+		void operator()(const std::string& name){
+	           visit(name);
 		}
 
 		void operator()(const ds_library::parse_nl_aggregate& s){
@@ -502,21 +509,27 @@ namespace ds_library {
 			for (int i=low;i<=high;i++){
 				std::stringstream number;
 				number << i;
-				container.push_back(s.name + "(" + number.str() + ")");
+				std::string name = s.name + "(" + number.str() + ")";
+				visit(name);
 			}
 		}
 
 
-		std::vector<std::string>::iterator begin(){
-			return container.begin();
-		}
+	private:
 
-		std::vector<std::string>::iterator  end(){
-			return container.end();
-		}
+		ds_structural::NetList *netlist;
+		ds_structural::PortType type;
 
-		void clear(){
-			container.clear();
+		void visit(const std::string& name){
+			ds_structural::Signal *s = new ds_structural::Signal(name);
+			netlist->add_signal(s);
+			if (create_port) {
+				ds_structural::PortBit *pb = new ds_structural::PortBit(name, type);
+				pb->setGate(netlist);
+				netlist->add_port(pb);
+				pb->set_signal(s);
+				s->add_port(pb);
+			}
 		}
 	};
 
@@ -524,7 +537,6 @@ namespace ds_library {
 
 		ds_structural::NetList *netlist;
 		ds_workspace::Workspace *wp;
-
 
 		instance_visitor(ds_structural::NetList *n, ds_workspace::Workspace *w):netlist(n),wp(w) {}
 

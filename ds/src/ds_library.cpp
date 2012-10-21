@@ -148,7 +148,7 @@ void ds_library::Library::load_nodes(){
 	typedef std::list<ds_lg::LGNode*>::iterator IT;
 	for (IT it=list.begin();it!=list.end();it++){
 		LGNode *n = *it;
-		prototypes[n->getType()] = n;
+		prototypes[n->get_type()] = n;
 	}
 
 }
@@ -258,11 +258,6 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 
 	typedef std::vector<ds_library::parse_netlist>::iterator IT;
 
-	BOOST_FOREACH( parse_netlist pl, netlists )
-	{
-		std::cout << "designs "  << pl.nl_name << std::endl;
-	}
-
 	IT top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
 	if (top == netlists.end()){
 		BOOST_THROW_EXCEPTION(parse_error()
@@ -353,59 +348,25 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl, ds_workspace::Workspace *workspace){
 	ds_structural::NetList *netlist = new ds_structural::NetList();
 	netlist->set_instance_name(nl.nl_name);
-	std::vector<std::string> temp_names;
-	std::vector<std::string> names;
-	ds_library::aggregate_visitor<std::vector<std::string> > aggregate_v(temp_names);
+	ds_library::aggregate_visitor aggregate_v(netlist, ds_structural::DIR_IN);
 	ds_library::instance_visitor instance_v(netlist, workspace);
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.inputs )
 	{
-		temp_names.clear();
 		boost::apply_visitor(aggregate_v, p);
-		BOOST_FOREACH( std::string n, temp_names)
-		{
-			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_IN);
-			pb->setGate(netlist);
-			netlist->add_port(pb);
-			ds_structural::Signal *s = new ds_structural::Signal(n);
-			netlist->add_signal(s);
-		}
 	}
+	aggregate_v.set_port_type(ds_structural::DIR_OUT);
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.outputs )
 	{
-		temp_names.clear();
 		boost::apply_visitor(aggregate_v, p);
-		BOOST_FOREACH( std::string n, temp_names )
-		{
-			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_OUT);
-			pb->setGate(netlist);
-			netlist->add_port(pb);
-			ds_structural::Signal *s = new ds_structural::Signal(n);
-			netlist->add_signal(s);
-		}
 	}
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.inouts )
 	{
-		temp_names.clear();
 		boost::apply_visitor(aggregate_v, p);
-		BOOST_FOREACH( std::string n, temp_names )
-		{
-			ds_structural::PortBit *pb = new ds_structural::PortBit(n,ds_structural::DIR_INOUT);
-			pb->setGate(netlist);
-			netlist->add_port(pb);
-			ds_structural::Signal *s = new ds_structural::Signal(n);
-			netlist->add_signal(s);
-		}
 	}
-
+	aggregate_v.create_port = false;
 	BOOST_FOREACH( ds_library::verilog_declaration p, nl.signals )
 	{
-		temp_names.clear();
 		boost::apply_visitor(aggregate_v, p);
-		BOOST_FOREACH( std::string n, temp_names )
-		{
-			ds_structural::Signal *s = new ds_structural::Signal(n);
-			netlist->add_signal(s);
-		}
 	}
 	BOOST_FOREACH( ds_library::verilog_instance instance, nl.instances )
 	{
@@ -421,13 +382,14 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 	if (g!=0){
 		g->set_instance_name(implicit.name);
 		netlist->add_gate(g);
+		g->set_parent(netlist);
 		typedef std::vector<std::string>::const_iterator PORT_IT;
 		ds_structural::port_container all_ports;
 		ds_structural::port_container::iterator port_iterator = all_ports.end();
-		all_ports.insert(port_iterator, g->get_inputs()->begin(),g->get_inputs()->end());
-		port_iterator = all_ports.end();
 		all_ports.insert(port_iterator, g->get_outputs()->begin(),g->get_outputs()->end());
-		std::vector<ds_structural::PortBit*>::iterator pi = all_ports.begin();
+		port_iterator = all_ports.end();
+		all_ports.insert(port_iterator, g->get_inputs()->begin(),g->get_inputs()->end());
+		ds_structural::port_container::iterator pi = all_ports.begin();
 		for (PORT_IT it = implicit.ports.begin();it!=implicit.ports.end();it++){
 			ds_structural::PortBit* pb = *pi;
 			pi++;
@@ -438,6 +400,7 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 				netlist->add_signal(signal);
 			}
 			signal->add_port(pb);
+			pb->set_signal(signal);
 		}
 	} else {
 		ds_structural::NetList *nl = wp->get_netlist(type,numPorts);
@@ -447,7 +410,7 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 		all_ports.insert(port_iterator, g->get_outputs()->begin(),g->get_outputs()->end());
 		port_iterator = all_ports.end();
 		all_ports.insert(port_iterator, nl->get_inputs()->begin(),nl->get_inputs()->end());
-		std::vector<ds_structural::PortBit*>::iterator pi = all_ports.begin();
+		ds_structural::port_container::iterator pi = all_ports.begin();
 		for (PORT_IT it = implicit.ports.begin();it!=implicit.ports.end();it++){
 			ds_structural::PortBit* pb = *pi;
 			pi++;
@@ -468,6 +431,7 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 			ds_structural::Gate *gate = gi->second;
 			gate->set_instance_name(implicit.name + "/" + gate->get_instance_name());
 			netlist->add_gate(gate);
+			gate->set_parent(netlist);
 		}
 		nl->gates.clear();
 

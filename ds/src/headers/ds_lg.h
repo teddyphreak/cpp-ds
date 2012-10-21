@@ -75,17 +75,21 @@ namespace ds_lg {
 
 	class LGNode {
 	public:
+		int level;
 		ds_structural::Gate *gate;
 		std::vector<LGNode*> outputs;
 		std::vector<LGNode*> inputs;
-		LGNode(const std::string &t):gate(0),outputs(0),inputs(0),endpoint(false),type(t){}
+		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t){}
+		void set_gate(ds_structural::Gate* g) {gate = g;}
+		ds_structural::Gate* get_gate() const{return gate;}
 		virtual void sim()=0;
 		virtual void propagate()=0;
-		virtual int64* getBinding(const char& name) const {return 0;}
+		virtual int64** get_binding(const char& name)=0;
+		virtual int64* get_output(const char& name)=0;
 		virtual LGNode* clone()=0;
 		virtual ~LGNode(){};
-		std::string getType() const {return type;}
-
+		std::string get_type() const {return type;}
+		virtual bool has_state() {return false;}
 	protected:
 		bool endpoint;
 		std::string type;
@@ -96,21 +100,25 @@ namespace ds_lg {
 		int64 *a;
 		int64 o;
 		int64 shadow;
+		std::string name;
 	public:
+		void set_name(const std::string& n){name = n;}
+		std::string get_name() const {return name;}
 		virtual void sim() { o = *a;}
 		virtual void propagate() { sim(); }
 		Input():LGNode("input"){};
 		virtual LGNode* clone() { return new Input();}
-		virtual int64* getBinding(const char& name){
+		virtual int64* get_output(const char& name) {if (name=='o')return &o;return 0;}
+		virtual int64** get_binding(const char& name){
 			switch(name){
-			case 'a': return a;
-			case 'o': return &o;
+			case 'a': return &a;
 			default: return 0;
 			}
 		}
 	};
 
 	class Output : public Input {
+	public:
 		Output():Input(){ type = "output"; endpoint = true;};
 		virtual LGNode* clone() { return new Output();}
 	};
@@ -126,7 +134,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode1I(const std::string& t, int64 (*AA)(int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode1I(type, A);}
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode2I : public LGNode {
@@ -141,7 +150,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode2I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode2I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode3I : public LGNode {
@@ -157,7 +167,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode3I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc c)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode3I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64** get_binding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
 	};
 
 	class LGNode4I : public LGNode {
@@ -174,7 +185,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode4I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode4I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode5I : public LGNode {
@@ -192,7 +204,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode5I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode5I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode6I : public LGNode {
@@ -211,7 +224,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode6I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode6I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode7I : public LGNode {
@@ -231,7 +245,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode7I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode7I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNode8I : public LGNode {
@@ -252,7 +267,8 @@ namespace ds_lg {
 		virtual void propagate() { sim(); }
 		LGNode8I(const std::string& t, int64 (*AA)(int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc, int64_cpc)):LGNode(t), A(AA){};
 		virtual LGNode* clone() { return new LGNode8I(type, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 	};
 
 	class LGNodeArr : public LGNode {
@@ -274,10 +290,41 @@ namespace ds_lg {
 			input_array = new int64*[inputSize];
 		};
 		virtual LGNode* clone() { return new LGNodeArr(type, inputSize, A); }
-		virtual int64* getBinding(const char& name);
+		virtual int64* get_output(const char& name) {if (name=='o')return &o; return 0;}
+		virtual int64** get_binding(const char& name);
 		virtual ~LGNodeArr(){
 			delete[] input_array;
 		};
+	};
+
+	typedef std::vector<LGNode*> lg_container;
+	typedef lg_container::iterator lg_iterator;
+
+	class LeveledGraph {
+
+	public:
+
+		lg_container inputs;
+		lg_container outputs;
+		lg_container nodes;
+		int max_level;
+		std::vector<lg_iterator> levels;
+
+		bool sanity_check();
+
+		void add_input(LGNode* in){
+			inputs.push_back(in);
+		}
+
+		void add_output(LGNode* out){
+			outputs.push_back(out);
+		}
+
+		lg_container::iterator get_inputs_begin(){return inputs.begin();}
+		lg_container::iterator get_inputs_end(){return inputs.end();}
+
+		lg_container::iterator get_outputs_begin(){return outputs.begin();}
+		lg_container::iterator get_outputs_end(){return outputs.end();}
 	};
 }
 
