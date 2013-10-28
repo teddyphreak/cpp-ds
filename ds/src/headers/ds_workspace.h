@@ -46,8 +46,7 @@ namespace ds_workspace {
 
 		ds_structural::Gate* get_gate(const std::string& name, std::size_t ports){
 			ds_structural::Gate* g = 0;
-			typedef std::vector<ds_library::Library*>::iterator LIB_IT;
-			for (LIB_IT lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
+			for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
 				ds_library::Library *l = *lib_it;
 				g = l->getGate(name, ports);
 				if (g!=0)
@@ -57,13 +56,24 @@ namespace ds_workspace {
 			return g;
 		}
 
+		ds_structural::Gate* get_gate(const std::string& name, const std::vector<std::string>& ports){
+			ds_structural::Gate* g = 0;
+			typedef std::vector<ds_library::Library*>::iterator LIB_IT;
+			for (LIB_IT lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
+				ds_library::Library *l = *lib_it;
+				g = l->getGate(name, ports);
+				if (g!=0)
+					break;
+			}
+			return g;
+		}
+
 		bool elaborate_netlist(const std::string& name, std::size_t ports){
 
 			ds_structural::NetList *netlist = 0;
 			typedef std::vector<ds_library::parse_netlist>::iterator PAR_IT;
 			PAR_IT par_it =	std::find_if(parsed_netlists.begin(), parsed_netlists.end(),
 			boost::bind(&ds_library::parse_netlist::nl_name, _1)==name);
-
 			if (par_it != parsed_netlists.end()){
 				std::size_t p = par_it->ports.size();
 				if (p == ports){
@@ -79,8 +89,10 @@ namespace ds_workspace {
 		ds_structural::NetList* get_netlist(const std::string& name, std::size_t ports){
 
 			ds_structural::NetList *netlist = 0;
-			typedef std::vector<ds_structural::NetList*>::iterator GATE_IT;
-			GATE_IT net_it = std::find_if(netlists.begin(), netlists.end(), ds_structural::name_eq_p<ds_structural::NetList*>(name));
+			auto net_it = std::find_if(netlists.begin(), netlists.end(),
+					[&] (ds_structural::NetList* n){
+					return n->get_instance_name() == name;
+			});
 			if (net_it != netlists.end()){
 				ds_structural::NetList *nl = *net_it;
 				if (nl->get_num_ports() == ports){
@@ -92,8 +104,10 @@ namespace ds_workspace {
 
 		ds_structural::NetList* get_design(const std::string& name){
 			ds_structural::NetList* nl = 0;
-			typedef std::vector<ds_structural::NetList*>::iterator NET_IT;
-			NET_IT gate_it = std::find_if(netlists.begin(), netlists.end(), ds_structural::name_eq_p<ds_structural::NetList*>(name));
+			auto gate_it = std::find_if(netlists.begin(), netlists.end(),
+					[&] (ds_structural::NetList* n){
+				return n->get_instance_name() == name;
+			});
 			if (gate_it != netlists.end())
 				nl = *gate_it;
 			return nl;

@@ -8,6 +8,8 @@
 #ifndef LIBRARY_H_
 #define LIBRARY_H_
 
+//#define BOOST_SPIRIT_DEBUG
+
 #include "ds_common.h"
 #include "ds_lg.h"
 #include "stdio.h"
@@ -34,15 +36,16 @@ namespace ds_workspace {
 
 namespace ds_library {
 
-	struct file_read_error: virtual boost::exception, virtual std::exception { };
-	struct parse_error: virtual boost::exception, virtual std::exception { };
-
 	namespace qi = boost::spirit::qi;
 	typedef std::map<std::string, ds_lg::bi_eval> function_map;
+	typedef std::map<std::string, bool> inversion_map;
 	typedef std::map<std::string, std::string> fusion_map;
 	typedef std::map<std::string, ds_structural::Gate*> gate_map_t;
 	typedef std::map<std::string, ds_lg::LGNode*> lgn_map_t;
 
+	const std::string value_0 = "0";
+	const std::string value_1 = "1";
+	const std::string value_X = "X";
 
 	class Library {
 
@@ -78,6 +81,7 @@ namespace ds_library {
 			function_map::const_iterator it = functions.find(name);
 			if (it != functions.end()){
 				ds_lg::bi_eval func = it->second;
+				bool invert = inversion.find(name)->second;
 				g = new ds_structural::Gate();
 				g->set_type(name);
 				ds_structural::PortBit *o_port = new ds_structural::PortBit("Z", ds_structural::DIR_OUT);
@@ -96,8 +100,27 @@ namespace ds_library {
 					g->add_mapping(port_name, lgn_port_name);
 					lgn_port++;
 				}
-				ds_lg::LGNode *n = new ds_lg::LGNodeArr(name, ports, func);
+				ds_lg::LGNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
 				g->set_lgn(n);
+			}
+		}
+		return g;
+	}
+
+	ds_structural::Gate* getGate(const std::string& name, const std::vector<std::string>& ports) const {
+		ds_structural::Gate* g = 0;
+		gate_map_t::const_iterator iterator = gate_map.find(name);
+		if (iterator != gate_map.end()){
+			ds_structural::Gate *c = iterator->second;
+			bool found = true;
+			std::vector<std::string>::const_iterator it = ports.begin();
+			for (;it!=ports.end();it++){
+				std::string port_name = *it;
+				if (c->find_port_by_name(port_name)==0) {
+					found = false;
+				}
+				if (found)
+					g = iterator->second->clone();
 			}
 		}
 		return g;
@@ -109,6 +132,7 @@ namespace ds_library {
 		gate_map_t gate_map;
 		lgn_map_t prototypes;
 		function_map functions;
+		inversion_map inversion;
 		virtual void load(const std::string &lib_name);
 		virtual void load_nodes();
 		void close();
@@ -128,7 +152,7 @@ namespace ds_library {
 		static LibraryFactory* instance;
 		library_map_t map;
 		LibraryFactory(){}
-		~LibraryFactory(){instance = 0;}
+		//~LibraryFactory(){instance = 0;}
 
 	public:
 		static LibraryFactory* getInstance(){
@@ -155,9 +179,9 @@ namespace ds_library {
 
 	struct parse_nl_aggregate
 	{
-		std::string name;
 		int left;
 		int right;
+		std::string name;
 	};
 
 	struct parse_nl_assignment
@@ -220,9 +244,9 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 BOOST_FUSION_ADAPT_STRUCT(
     ds_library::parse_nl_aggregate,
-    (std::string, name)
     (int, left)
     (int, right)
+    (std::string, name)
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -275,19 +299,10 @@ namespace ds_library {
 			using qi::_1;
 			using qi::_0;
 			using qi::eps;
-			using qi::debug;
-			using qi::on_error;
-			using qi::fail;
-			using qi::lexeme;
-			using qi::omit;
-			using qi::no_skip;
-			using phoenix::construct;
-			using phoenix::val;
 			using phoenix::at_c;
 			using phoenix::push_back;
 			using phoenix::ref;
 			using boost::spirit::_val;
-			using boost::spirit::repository::distinct;
 
 			start = *netlist[push_back(_val,_1)];
 
@@ -309,48 +324,36 @@ namespace ds_library {
 					)
 					>> "endmodule";
 
-			name = -lit("\\") >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9/");
-			ports = name % ',';
-			aggregate = name >> lit('[') >> int_ >> lit(':') >> int_>> lit(']');
+			name = -lit("\\") >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9[]/") ;
+			b_constant = "1'b" >> qi::char_("0-1");
+			ports =  name  % ',';
+			aggregate =   lit('[') >> int_ >> lit(':') >> int_ >> lit(']') >> name;
 			declaration = (aggregate | name ) [_val = _1];
-			assign = "assign" >> name >> lit('=') >> name;
+			assign = "assign" >>  ( name ) >> lit('=') >> ( name );
 			instance = implicit_i | explicit_i;
-			implicit_i = name_ns >> name >> lit('(') >> ports >> lit(')');
-			explicit_i = name_ns >> name >> lit('(') >> binding % ',' >> lit(')');
-			binding = lit('.') >> name >> lit('(') >> name >> lit(')');
-			name_ns = no_skip[omit[*ascii::space] >> (qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9")) >> omit[*ascii::space]];
+			implicit_i = name >> name >> lit('(') >> ports >> lit(')');
+			explicit_i = name >> name >> lit('(') >> binding % ',' >> lit(')');
+			binding = lit('.') >> name >> lit('(') >> ( name | b_constant) >> lit(')');
 
-			name.name("name");
-			ports.name("ports");
-			aggregate.name("aggregate");
-			declaration.name("declaration");
-			assign.name("name");
-			implicit_i.name("implicit");
-			start.name("start");
-			name_ns.name("name_ns");
-			netlist.name("netlist");
-			assign.name("assign");
-			implicit_i.name("implicit");
-			explicit_i.name("explicit");
-			instance.name("instance");
-
-//			debug(name);
-//			debug(ports);
-//			debug(aggregate);
-//			debug(declaration);
-//			debug(assign);
-//			debug(implicit_i);
-//			debug(start);
-//			debug(name_ns);
-//			debug(netlist);
-//			debug(assign);
-//			debug(implicit_i);
-//			debug(explicit_i);
-//			debug(instance);
+			BOOST_SPIRIT_DEBUG_NODE(name);
+			BOOST_SPIRIT_DEBUG_NODE(b_constant);
+			BOOST_SPIRIT_DEBUG_NODE(slice);
+			BOOST_SPIRIT_DEBUG_NODE(ports);
+			BOOST_SPIRIT_DEBUG_NODE(aggregate);
+			BOOST_SPIRIT_DEBUG_NODE(declaration);
+			BOOST_SPIRIT_DEBUG_NODE(assign);
+			BOOST_SPIRIT_DEBUG_NODE(implicit_i);
+			BOOST_SPIRIT_DEBUG_NODE(start);
+			BOOST_SPIRIT_DEBUG_NODE(netlist);
+			BOOST_SPIRIT_DEBUG_NODE(assign);
+			BOOST_SPIRIT_DEBUG_NODE(implicit_i);
+			BOOST_SPIRIT_DEBUG_NODE(explicit_i);
+			BOOST_SPIRIT_DEBUG_NODE(instance);
 
 		}
 
-		qi::rule<Iterator, std::string(), ascii::space_type> name, name_ns;
+		qi::rule<Iterator, std::string()> name;
+		qi::rule<Iterator, std::string(), ascii::space_type> slice, number, b_constant;
 		qi::rule<Iterator, std::vector<std::string>(), ascii::space_type> ports;
 		qi::rule<Iterator, std::pair<std::string,std::string>(), ascii::space_type> binding;
 		qi::rule<Iterator, ds_library::parse_nl_aggregate(), ascii::space_type> aggregate;
@@ -408,7 +411,7 @@ namespace ds_library {
 	};
 
 	template <typename Iterator>
-	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, function_map& functions){
+	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, function_map& functions, inversion_map& inversion){
 
 		parse_lib_node n;
 		lib_parser<Iterator> p;
@@ -419,7 +422,7 @@ namespace ds_library {
 			std::size_t num_outputs = n.outputs;
 			if (num_inputs != n.i_mapping.size() || num_outputs != n.o_mapping.size())
 
-				BOOST_THROW_EXCEPTION(ds_library::parse_error()
+				BOOST_THROW_EXCEPTION(ds_common::parse_error()
 				<< ds_common::errmsg_info("Inconsistent # of inputs/outputs"));
 
 			else {
@@ -428,7 +431,7 @@ namespace ds_library {
 				lgn_map_t::iterator iterator = prototypes.find(n.node_name);
 				if (iterator == prototypes.end()){
 
-					BOOST_THROW_EXCEPTION(ds_library::parse_error()
+					BOOST_THROW_EXCEPTION(ds_common::parse_error()
 					<< ds_common::errmsg_info("Unknown prototype: " + n.node_name));
 
 				}
@@ -454,21 +457,27 @@ namespace ds_library {
 				if (n.flexible){
 					if (n.gate_name == "and"){
 						functions[n.gate_name] = ds_lg::f_and2;
+						inversion[n.gate_name] = false;
 					}
 					if (n.gate_name == "or"){
 						functions[n.gate_name] = ds_lg::f_or2;
+						inversion[n.gate_name] = false;
 					}
 					if (n.gate_name == "xor"){
 						functions[n.gate_name] = ds_lg::f_xor2;
+						inversion[n.gate_name] = false;
 					}
 					if (n.gate_name == "nand"){
-						functions[n.gate_name] = ds_lg::f_nand2;
+						functions[n.gate_name] = ds_lg::f_and2;
+						inversion[n.gate_name] = true;
 					}
 					if (n.gate_name == "nor"){
-						functions[n.gate_name] = ds_lg::f_nor2;
+						functions[n.gate_name] = ds_lg::f_or2;
+						inversion[n.gate_name] = true;
 					}
 					if (n.gate_name == "xnor"){
-						functions[n.gate_name] = ds_lg::f_xnor2;
+						functions[n.gate_name] = ds_lg::f_xor2;
+						inversion[n.gate_name] = true;
 					}
 				}
 
@@ -509,7 +518,7 @@ namespace ds_library {
 			for (int i=low;i<=high;i++){
 				std::stringstream number;
 				number << i;
-				std::string name = s.name + "(" + number.str() + ")";
+				std::string name = s.name + "[" + number.str() + "]";
 				visit(name);
 			}
 		}

@@ -19,10 +19,12 @@
 #include <boost/bind.hpp>
 #include <boost/checked_delete.hpp>
 #include "ds_common.h"
+#include "ds_simulation.h"
 
 namespace ds_lg {
 	class LGNode;
 	class LeveledGraph;
+	struct lg_v64;
 
 }
 
@@ -37,10 +39,12 @@ namespace ds_structural {
 	class PortBit;
 
 	typedef std::vector<PortBit*> port_container;
+	typedef port_container::iterator port_iterator;
 	typedef std::map<std::string,std::string> function_map_t;
 	typedef std::map<std::string, Gate*> gate_map_t;
 	typedef std::map<std::string, Signal*> signal_map_t;
 	typedef std::list<ds_structural::PortBit*> sp_container;
+	typedef std::map<std::string, std::string> assignment_map_t;
 
 	enum PortType {
 		DIR_IN,
@@ -56,8 +60,8 @@ namespace ds_structural {
 		PortType type;
 	public:
 		PortBit(const std::string n, Signal * const s, Gate * const g, const PortType& t):name(n),signal(s),gate(g),type(t){}
-		PortBit(const std::string n, Gate * const g, const PortType& t):name(n),gate(g), type(t){}
-		PortBit(const std::string n, const PortType& t):name(n),type(t){gate=0;}
+		PortBit(const std::string n, Gate * const g, const PortType& t):name(n), signal(0),gate(g), type(t){}
+		PortBit(const std::string n, const PortType& t):name(n),signal(0),type(t){gate=0;}
 
 		void setGate(Gate * const g){gate = g;}
 		void disconnect(){signal = 0;}
@@ -67,6 +71,7 @@ namespace ds_structural {
 		Signal* get_signal() const {return signal;}
 		PortType get_type() const {return type;}
 		std::string get_qualified_name() const;
+		~PortBit();
 
 	};
 
@@ -75,57 +80,24 @@ namespace ds_structural {
 	private:
 		std::string name;
 		sp_container ports;
+		ds_simulation::Value val;
 	public:
 		std::string get_instance_name() const {return name;}
 		void set_name(const std::string& n){name = n;}
-		Signal(const std::string& name):name(name) {}
+		Signal(const std::string& name, ds_simulation::Value val):name(name),val(val) {}
+		Signal(const std::string& name):Signal(name, ds_simulation::BIT_UD) {}
 		void add_port(PortBit * const pb) {ports.push_back(pb); pb->set_signal(this);}
 		void remove_port(PortBit * const pb) {ports.remove(pb); pb->disconnect();}
-		const sp_container::const_iterator port_begin() const {return ports.begin();}
-		const sp_container::const_iterator port_end() const {return ports.end();}
+		sp_container::const_iterator port_begin() const {return ports.begin();}
+		sp_container::const_iterator port_end() const {return ports.end();}
 		int count_ports(){return ports.size();}
-
-	};
-
-	template <class T> bool inst_name (const T& a1, const T& a2){
-		if (a1.get_instance_name() == a2.get_Instance_name())
-			return true;
-		return false;
-	}
-
-	template <class T> class name_eq_p : public std::unary_function<T,bool> {
-		std::string arg2;
-	public:
-		explicit name_eq_p(const std::string s): arg2(s){};
-		bool operator()(const T& x)  {
-			return x->get_instance_name() == arg2;
-		}
-	};
-
-	template <class T> class inst_eq_p : public std::unary_function<T,bool> {
-		T arg2;
-	public:
-		explicit inst_eq_p(const T& a): arg2(a){};
-		bool operator()(const T& x)  {
-			return x->get_instance_name() == arg2->get_instance_name();
-		}
-	};
-
-	template <class T> class name_eq : public std::unary_function<T,bool> {
-		std::string arg2;
-	public:
-		explicit name_eq(const std::string s): arg2(s){};
-		bool operator()(T& x)  {
-			return x.get_instance_name() == arg2;
-		}
-	};
-
-	template <class T> class inst_eq : public std::unary_function<T,bool> {
-		T arg2;
-	public:
-		explicit inst_eq(const T& a): arg2(a){};
-		bool operator()(T& x)  {
-			return x.get_instance_name() == arg2.get_instance_name();
+		bool is_fixed() const {return val != ds_simulation::BIT_UD;}
+		ds_simulation::Value get_fixed_value() const {return val;}
+		void set_value(const ds_simulation::Value& v ) {val = v;}
+		void detach(){
+			for (ds_structural::PortBit *pb:ports){
+				pb->disconnect();
+			}
 		}
 	};
 
@@ -171,24 +143,37 @@ namespace ds_structural {
 			port_container* ports = &outputs;
 			if (pb->get_type()==DIR_IN)
 				ports = &inputs;
-			port_container::iterator port = std::find_if(ports->begin(), ports->end(), inst_eq_p<PortBit*>(pb));
+			port_container::iterator port = std::find_if(ports->begin(), ports->end(),
+					[&](PortBit* p) {
+				return pb->get_instance_name() == p->get_instance_name();
+			});
 			if (port != ports->end())
 				ports->erase(port);
 		}
 
 		PortBit* find_port_by_name(const std::string& n){
-			port_container::iterator port = std::find_if(inputs.begin(), inputs.end(), name_eq_p<PortBit*>(n));
+			port_container::iterator port = std::find_if(inputs.begin(), inputs.end(),
+					[&](PortBit* p) {
+				return n == p->get_instance_name();
+			});
 			if (port != inputs.end())
 				return *port;
-			port = std::find_if(outputs.begin(), outputs.end(), name_eq_p<PortBit*>(n));
+			port = std::find_if(outputs.begin(), outputs.end(),
+					[&](PortBit* p) {
+				return n == p->get_instance_name();
+			});
 			if (port != outputs.end())
 				return *port;
 			return 0;
 
 		}
 		virtual ~Gate() {
-			std::for_each(inputs.begin(), inputs.end(), boost::checked_deleter<PortBit>());
-			std::for_each(outputs.begin(), outputs.end(), boost::checked_deleter<PortBit>());
+			for (PortBit* in: inputs){
+				delete(in);
+			}
+			for (PortBit* out: outputs){
+				delete(out);
+			}
 		}
 	};
 
@@ -199,7 +184,9 @@ namespace ds_structural {
 		signal_map_t signals;
 		int signal_counter;
 		signal_map_t own_signals;
-		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_common::int64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
+		assignment_map_t assignment_map;
+		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_lg::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
+		void find_unused_gates(const PortBit *pb, std::vector<const Gate*> *unused);
 	public:
 		void set_name(const std::string& n){name = n;}
 		std::string get_instance_name() const {return name;}
@@ -218,6 +205,7 @@ namespace ds_structural {
 		void add_signal(Signal * const s){signals[s->get_instance_name()]= s;}
 		void remove_signal(Signal* s){
 			signals.erase(s->get_instance_name());
+			s->detach();
 		}
 		Signal* find_signal(const std::string& name){
 			signal_map_t::iterator it = signals.find(name);
@@ -233,19 +221,34 @@ namespace ds_structural {
 			return s;
 		}
 		ds_lg::LeveledGraph* build_leveled_graph();
+
+		void add_assignment(std::string lhs, std::string rhs) {
+			assignment_map[lhs] = rhs;
+		}
+
+		void get_output_cone(PortBit *pb, std::set<PortBit*> *cone);
+
 		~NetList(){
-			for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
-				delete it->second;
-			}
+
 			for (signal_map_t::iterator it=signals.begin();it!=signals.end();it++){
+				it->second->detach();
 				delete it->second;
 			}
 			for (signal_map_t::iterator it=own_signals.begin();it!=own_signals.end();it++){
 				delete it->second;
 			}
+			for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
+				delete it->second;
+			}
+
 		}
 
 		bool check_netlist();
+		void remove_floating_signals();
+		bool remove_unused_gates();
+	protected:
+		void drive(PortBit*pb, ds_lg::lg_v64 *driver);
+
 	};
 
 
