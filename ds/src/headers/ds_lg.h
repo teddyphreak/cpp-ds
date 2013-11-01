@@ -223,7 +223,7 @@ namespace ds_lg {
 	 */
 	class LGNode {
 	public:
-		int level;								//!< level in the graph
+		std::size_t level;						//!< level in the graph
 		ds_structural::Gate *gate;				//!< equivalent gate in netlist
 		std::vector<LGNode*> outputs;			//!< output nodes
 		std::vector<LGNode*> inputs;			//!< input nodes
@@ -321,6 +321,12 @@ namespace ds_lg {
 		 * @return a copy of the value of the node's output
 		 */
 		lg_v64 peek() const {return o;}
+
+		/*!
+		 * revert output to previous value
+		 */
+		virtual void rollback(){o = bo;}
+
 	protected:
 		lg_v64 o; 						//!< node output
 		lg_v64 bo;						//!< backup node output
@@ -768,8 +774,7 @@ namespace ds_lg {
 		protected:
 			lg_v64 * d;		//!< data input
 			lg_v64 * cd;	//!< clk input
-			lg_v64 q;		//!< Q output
-			lg_v64 qn;		//!< not Q output
+			lg_v64 on;		//!< not Q output
 		public:
 			/*!
 			 * update outputs when clk event is active
@@ -779,6 +784,10 @@ namespace ds_lg {
 			 * initializes node type. This gate is an endpoint.
 			 * @param t node type
 			 */
+			/*!
+			 * revert output to previous value
+			 */
+			virtual void rollback(){o = bo; on = ~bo;}
 			LGState(const std::string& t):LGNode(t){endpoint = true;};
 			/*!
 			 * allocate new LGState instance according to the prototype pattern
@@ -791,8 +800,8 @@ namespace ds_lg {
 			 * @return pointer to the node's requested output primitive value
 			 */
 			virtual lg_v64* get_output(const std::string& name) {
-				if (name=="Q")return &q;
-				if (name=="QN")return &qn;
+				if (name=="Q")return &o;
+				if (name=="QN")return &on;
 				return 0;}
 			/*!
 			 * two input ports available
@@ -890,16 +899,29 @@ namespace ds_lg {
 		 * @param hook
 		 */
 		void add_hook(ds_faults::SimulationHook* hook){hooks.push_back(hook);};
+
 		/*!
 		 * removes all active hooks
 		 */
 		void clear_hooks(){hooks.clear();}
 
-	private:
+		/*!
+		 * evaluate nodes in simulation and manage simulation events
+		 */
+		void sim_intermediate();
+
+		/*!
+		 * push node into event simulation node list
+		 * @param node node to include
+		 */
+		void push_node(LGNode *node){simulation[node->level].push_back(node);}
+
+	protected:
+		std::size_t num_levels;										//!< number of levels in the graph
 		ds_pattern::SimPatternBlock *pattern_block; 		//!< current pattern block for simulation
 		std::vector<lg_node_iterator> levels;				//!< level iterators. Two iterators define the nodes in a level
+		std::vector<lg_node_container> simulation;			//!< nodes to evaluate during intermediate simulation
 		std::vector<unsigned int> level_width;				//!< number of nodes per level
-		int num_levels;										//!< number of levels in the graph
 		lg_v64 constant_0 = lg_v64(0L,0L);
 		lg_v64 constant_1 = lg_v64(-1L,0L);
 		lg_v64 constant_X = lg_v64(0L,-1L);

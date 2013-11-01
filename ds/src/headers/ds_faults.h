@@ -85,14 +85,16 @@ public:
 	/*!
 	 * changes the simulation value in the leveled graph if the activation condition is met
 	 * @param nl netlist
+	 * @returns pointer to the binded node where the fault is activated. Null pointer of the fault is not activated
 	 */
 	virtual ds_lg::LGNode* hook(ds_lg::LeveledGraph* lg){
 		ds_lg::LGNode* n = bind(lg);
 		ds_lg::int64 a = activate();
 		if (a!=0){
 			victim->v = victim->v ^ (a & mask);
+			return n;
 		}
-		return n;
+		return 0;
 	}
 	/**!
 	 * finds victim primitive in the provided leveled graph

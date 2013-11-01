@@ -124,7 +124,7 @@ namespace ds_lg {
 			}
 		}
 
-		for (int i=0;i<num_levels;i++){
+		for (std::size_t i=0;i<num_levels;i++){
 			unsigned int cnt = 0;
 			std::for_each(nodes.begin(), nodes.end(),
 				[&] (LGNode* n) { if (n->level == i) cnt++;}
@@ -169,12 +169,29 @@ namespace ds_lg {
 		}
 		//inject hooks
 		for (ds_faults::SimulationHook* h: hooks){
-			h->hook(this);
+			LGNode *node = h->hook(this);
+			if (node != 0){
+				push_node(node);
+			}
 		}
-		//propagate hooks
-		for (auto it=nodes.begin();it!=nodes.end();it++){
-			LGNode *n = *it;
-			n->propagate();
+		sim_intermediate();
+	}
+
+	void LeveledGraph::sim_intermediate(){
+		for (std::size_t i=0;i<num_levels;i++){
+			for (LGNode *n: simulation[i]){
+				if (n->propagate()){
+					for (LGNode *o : n->outputs){
+						push_node(o);
+					}
+				}
+			}
+		}
+		for (std::size_t i=0;i<num_levels;i++){
+			for (LGNode *n: simulation[i]){
+				n->rollback();
+			}
+			simulation[i].clear();
 		}
 
 	}
