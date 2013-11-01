@@ -54,19 +54,21 @@ Gate* ds_structural::Gate::clone(){
 
 NetList* ds_structural::NetList::clone(){
 	NetList *nl = new NetList();
+	//copy ports
 	copy(nl);
-	typedef ds_structural::gate_map_t::iterator GATE_IT;
-	for (GATE_IT gate_it = gates.begin();gate_it!=gates.end();gate_it++){
+
+	//copy gates
+	for (auto gate_it = gates.begin();gate_it!=gates.end();gate_it++){
 		Gate *g= gate_it->second;
 		nl->add_gate(g->clone());
 	}
 	nl->signal_counter = signal_counter;
-	typedef ds_structural::signal_map_t::iterator SIG_IT;
-	for (SIG_IT sig_it = signals.begin();sig_it!=signals.end();sig_it++){
+
+	//copy signals
+	for (auto sig_it = signals.begin();sig_it!=signals.end();sig_it++){
 		Signal *s = sig_it->second;
 		Signal *copy = new Signal(s->get_instance_name());
-		typedef std::list<PortBit*>::const_iterator PORT_IT;
-		for (PORT_IT port_it = s->port_begin(); port_it != s->port_end(); port_it++){
+		for (auto port_it = s->port_begin(); port_it != s->port_end(); port_it++){
 			PortBit *port = *port_it;
 			std::string gate_name = port->get_gate()->get_instance_name();
 			Gate *g = find_gate(name);
@@ -75,11 +77,11 @@ NetList* ds_structural::NetList::clone(){
 		}
 		nl->add_signal(copy);
 	}
-	for (SIG_IT sig_it = own_signals.begin();sig_it!=own_signals.end();sig_it++){
+	// copy owned signals
+	for (auto sig_it = own_signals.begin();sig_it!=own_signals.end();sig_it++){
 		Signal *s = sig_it->second;
 		Signal *copy = new Signal(s->get_instance_name());
-		typedef std::list<PortBit*>::const_iterator PORT_IT;
-		for (PORT_IT port_it = s->port_begin(); port_it != s->port_end(); port_it++){
+		for (auto port_it = s->port_begin(); port_it != s->port_end(); port_it++){
 			PortBit *port = *port_it;
 			std::string gate_name = port->get_gate()->get_instance_name();
 			Gate *g = find_gate(name);
@@ -237,11 +239,29 @@ std::string ds_structural::PortBit::get_qualified_name() const {
 	return g->get_instance_name() + "/" + get_instance_name();
 }
 
+ds_lg::LeveledGraph* ds_structural::NetList::clone_leveled_graph(){
+
+	if (lg==0)
+		return 0;
+
+	lg = 0;
+	for (auto gate_it = gates.begin();gate_it!=gates.end();gate_it++){
+		Gate* g = gate_it->second;
+		ds_lg::LGNode* n = g->get_lgn();
+		g->set_lgn(n->clone());
+	}
+	return build_leveled_graph();
+}
+
 ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	using ds_lg::LGNode;
 	using ds_structural::PortBit;
 	using ds_structural::Gate;
-	ds_lg::LeveledGraph *lg = new ds_lg::LeveledGraph();  	// return value
+
+	if (lg!=0)
+		return lg;
+
+	lg = new ds_lg::LeveledGraph();  	// return value
 	std::vector<Gate*> state_gates;
 	std::stack<Gate*> todo;
 
@@ -256,14 +276,14 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	}
 
 	std::map<std::string, Gate*> trace;
-	std::list<LGNode*> levelize_list;
+	std::list<LGNode*> level_list;
 
 	for (ds_structural::PortBit* pb: outputs)
 	{
 		ds_lg::Output *out = new ds_lg::Output();	// create output
 		out->set_gate(this);						// outputs ports belong to the enclosing netlist
 		out->set_name(pb->get_qualified_name());
-		levelize_list.push_back(out);				// this node is traced back
+		level_list.push_back(out);				// this node is traced back
 		lg->add_output(out);
 		Signal *s = pb->get_signal();
 		for (ds_structural::sp_container::const_iterator pi=s->port_begin();pi!=s->port_end();pi++){
@@ -273,7 +293,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 				LGNode *driverNode = d->get_gate()->get_lgn();	// locate LGN of driving gate
 				out->inputs.push_back(driverNode);				// update LGN's inputs and outputs
 				driverNode->outputs.push_back(out);
-				ds_lg::lg_v64** in = out->get_binding("a");
+				ds_lg::lg_v64** in = out->get_input("a");		//primitive inputs are 'a'
 				std::string m = d->get_gate()->get_mapping(d->get_instance_name());
 				ds_lg::lg_v64 *driver = driverNode->get_output(m);
 				*in = driver;
@@ -289,11 +309,11 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		in->set_name(pb->get_qualified_name());
 		lg->add_input(in);
 		in->level = 0;										// inputs have depth 0
-		ds_lg::lg_v64 *driver = in->get_output("o");
-		trace_lg_forward(pb, in, driver, &trace, &todo);
+		ds_lg::lg_v64 *driver = in->get_output("o");		//primitive outputs are 'o'
+		trace_lg_forward(pb, in, driver, &trace, &todo);	//trace inputs forward
 		Signal *s = pb->get_signal();
 		if (s!=0) {
-			for (auto pi=s->port_begin();pi!=s->port_end();pi++){
+			for (auto pi=s->port_begin();pi!=s->port_end();pi++){	// setup input and output nodes
 				PortBit *pb = *pi;
 				if (pb->get_type() == ds_structural::DIR_IN){
 					ds_lg::LGNode* receiver = pb->get_gate()->get_lgn();
@@ -306,6 +326,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		}
 	}
 
+	// continue forward trace with gates not considered so far
 	while (!todo.empty()){
 		Gate *g = todo.top();
 		todo.pop();
@@ -318,17 +339,19 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		}
 	}
 
+	// include state inputs in level list
 	for (ds_structural::Gate *g: state_gates)
 	{
 		LGNode *lgn = g->get_lgn();
 		for (ds_lg::LGNode *in: lgn->inputs)
 		{
 			if (!in->has_state())
-				levelize_list.push_back(in);
+				level_list.push_back(in);
 		}
 	}
 
-	for (ds_lg::LGNode *lgn: levelize_list)
+	// level gates: push them onto stack till a levelized node is found. Then calculate the levels for the nodes in between
+	for (ds_lg::LGNode *lgn: level_list)
 	{
 		std::stack<LGNode*> st;
 		st.push(lgn);
@@ -355,20 +378,20 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		}
 	}
 
+	//calculate max level
 	int max_level = 0;
 	ds_lg::lg_output_container::iterator oi = lg->get_outputs_begin();
 	for (;oi!=lg->get_outputs_end();oi++){
 		if ((*oi)->level > max_level)
 			max_level = (*oi)->level;
 	}
-
 	lg->num_levels = max_level;
 
+	// build level map and fill level map with inputs and outputs
 	std::map<int, std::set<LGNode*>* > level_map;
 	for (int i=0;i<max_level+1;i++){
 		level_map[i] = new std::set<LGNode*>();
 	}
-
 	for (ds_lg::LGNode *in: lg->inputs)
 	{
 		level_map[in->level]->insert(in);
@@ -377,6 +400,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	{
 		level_map[out->level]->insert(out);
 	}
+	// fill level map with traced nodes
 	for (std::map<std::string, Gate*>::iterator gi = trace.begin(); gi!=trace.end();gi++){
 		LGNode *lgn = gi->second->get_lgn();
 		if (lgn->level > 0) {
@@ -384,6 +408,8 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 
 		}
 	}
+
+	// add nodes in level order to the nodes container
 	for (int i=0;i<max_level+1;i++){
 		std::set<LGNode*> *set = level_map[i];
 		std::set<LGNode*>::iterator it = set->begin();
@@ -394,16 +420,17 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		delete set;
 	}
 
+	//find iterators pointing to the first element of each level
 	for  (int i=0;i<max_level+1;i++){
 		ds_lg::lg_node_container::iterator it = std::find_if(lg->nodes.begin(), lg->nodes.end(),
 				[&] (const LGNode* n) { return n->level == i;});
 		lg->levels.push_back(it);
 	}
 
+	// count nodes per level
 	for (int i=0;i<max_level;i++){
 		auto cIt = lg->levels[i];
 		auto nIt = lg->levels[i+1];
-
 		unsigned int level_size = 0;
 		while (cIt!=nIt){
 			level_size++;
@@ -414,6 +441,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	}
 	level_map.clear();
 
+	//drive constant '0' assignments
 	Signal *s0 = find_signal(ds_library::value_0);
 	if (s0!=0){
 		for (auto pi=s0->port_begin();pi!=s0->port_end();pi++){
@@ -422,6 +450,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 
 	}
 
+	//drive constant '1' assignments
 	Signal *s1 = find_signal(ds_library::value_1);
 	if (s1!=0){
 		for (auto pi=s1->port_begin();pi!=s1->port_end();pi++){
@@ -429,37 +458,34 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		}
 	}
 
+	//identify state elements
 	for (LGNode *n:lg->nodes){
 		if (n->has_state())
 			lg->registers.push_back(n);
 	}
+
+	//check graph integrity
 	bool c = lg->sanity_check();
 
 	if (!c)
 		std::cout << "Sanity check failed" << std::endl;
 
+
 	return lg;
 }
 
 void ds_structural::NetList::drive(PortBit*pb, ds_lg::lg_v64 *driver){
+
+	// get receiver simulation node
 	Gate *g = pb->get_gate();
 	std::string m = g->get_mapping(pb->get_instance_name());
 	ds_lg::LGNode *target = g->get_lgn();
-	ds_lg::lg_v64** rec = target->get_binding(m);
+	// get the simulation input
+	ds_lg::lg_v64** rec = target->get_input(m);
+	// connect input to output
 	*rec = driver;
 }
 
-
-/**
- *
- * @param port_bit
- * Output port to trace forward
- * @param node
- *
- * @param driver
- * @param trace
- * @param todo
- */
 void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port_bit, ds_lg::LGNode* node,
 		ds_lg::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo){
 
@@ -470,15 +496,20 @@ void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port
 
 	Signal *s = port_bit->get_signal();
 
+	// no signal attached
 	if (s==0) {
 		return;
 	}
 
+	// trace all input ports attached to the driving port
 	for (auto pi=s->port_begin();pi!=s->port_end();pi++){
 		PortBit *pb = *pi;
 		if (pb->get_type() == ds_structural::DIR_IN && pb != port_bit){
 
+			//connect simulation output to input
 			drive(pb, driver);
+
+			// if receiver gate has not been traced, schedule it for tracing
 			Gate *g = pb->get_gate();
 			ds_lg::LGNode *target = g->get_lgn();
 			auto ti = trace->find(g->get_instance_name());
@@ -487,6 +518,7 @@ void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port
 				(*trace)[g->get_instance_name()] = g;
 			}
 
+			//setup input and output nodes for the driver and receiver
 			auto oi = std::find(node->outputs.begin(), node->outputs.end(), target);
 			if (oi == node->outputs.end()){
 				node->outputs.push_back(target);
@@ -504,6 +536,7 @@ void ds_structural::NetList::get_output_cone(ds_structural::PortBit *pb, std::se
 	using ds_structural::Signal;
 
 	std::stack<PortBit*> st;
+	// if provided port is an input, push the outputs of the same gate
 	if(pb->get_type() == ds_structural::DIR_IN){
 		Gate *g = pb->get_gate();
 		for (auto pb_it = g->get_outputs()->begin(); pb_it!=g->get_outputs()->end();pb_it++){
@@ -513,20 +546,25 @@ void ds_structural::NetList::get_output_cone(ds_structural::PortBit *pb, std::se
 		st.push(pb);
 	}
 
+	// trace forward until there are no more gates
 	while (!st.empty()){
 
 		PortBit *port = st.top();
 		st.pop();
 		Signal *s = port->get_signal();
+
+		//check all connections
 		for (auto it = s->port_begin();it!=s->port_end();it++){
 			PortBit *receiver_port = *it;
 			Gate *receiver_gate = receiver_port->get_gate();
 			if (receiver_gate == this) {
+				// we have reached the top level netlist. (pseudo) primary output found
 				cone->insert(receiver_port);
 			} else {
 				if (receiver_port->get_type() == ds_structural::DIR_IN){
 					for (auto op_it = receiver_gate->get_outputs()->begin();
 							op_it != receiver_gate->get_outputs()->end();op_it++) {
+						//trace the output ports of this gate we have just reaches
 						st.push(*op_it);
 					}
 				}
@@ -541,7 +579,6 @@ void ds_structural::NetList::remove_floating_signals(){
 	while (it!=signals.end()){
 		Signal *s = it->second;
 		if (s->count_ports() == 0){
-
 			auto del = it++;
 			delete(s);
 			signals.erase(del);
@@ -556,8 +593,11 @@ bool ds_structural::NetList::remove_unused_gates(){
 
 	auto it = gates.begin();
 	bool remove = false;
+	//check all gates
 	while (it!=gates.end()){
 		Gate *g = it->second;
+
+		//check if gate is attached: if any of its output ports has more than one connection
 		bool isAttached = false;
 		const ds_structural::port_container *outputs = g->get_outputs();
 		for (auto it=outputs->begin(); it!=outputs->end();it++ ){
@@ -569,8 +609,10 @@ bool ds_structural::NetList::remove_unused_gates(){
 				break;
 			}
 		}
+
 		if (!isAttached){
 
+			//gate is NOT attached: schedule for removal
 			remove = true;
 			auto del = it++;
 			const ds_structural::port_container *inputs = g->get_inputs();
@@ -579,10 +621,11 @@ bool ds_structural::NetList::remove_unused_gates(){
 				PortBit *pb = *del;
 				Signal *spb = pb->get_signal();
 				if (spb->count_ports() == 1){
+					// remove floating signal
 					remove_signal(spb);
 					delete(spb);
 				} else if (spb->count_ports() == 2){
-
+					// check if driver gate is also unused
 					std::vector<const Gate*> to_remove;
 					find_unused_gates(pb, &to_remove);
 					for(const Gate* r:to_remove){
@@ -593,6 +636,7 @@ bool ds_structural::NetList::remove_unused_gates(){
 				}
 			}
 
+			// remove floating signals in the output ports
 			for (auto del=outputs->begin(); del!=outputs->end();del++ ){
 				PortBit *pb = *del;
 				Signal *spb = pb->get_signal();
@@ -601,6 +645,8 @@ bool ds_structural::NetList::remove_unused_gates(){
 					delete(spb);
 				}
 			}
+
+			//remove gate
 			gates.erase(del);
 			delete(g);
 
@@ -611,8 +657,10 @@ bool ds_structural::NetList::remove_unused_gates(){
 	return remove;
 }
 
+
 void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<const Gate*> *unused){
 
+	// initialize stack with provided netlist
 	std::stack<const PortBit*> todo;
 	todo.push(pb);
 
@@ -620,22 +668,34 @@ void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<co
 		const PortBit *current = todo.top();
 		todo.pop();
 		Signal *s = current->get_signal();
+
+		//proceed only if port is connected to one other port
 		if (s->count_ports() == 2) {
 
+			// find driver port at the other end
 			PortBit*  driver = *(s->port_begin());
 			if (driver == current){
 				driver = *(++s->port_begin());
 			}
-			Gate *driver_gate = driver->get_gate();
+
+			// remove signal
 			remove_signal(s);
 			delete(s);
+
+			// potentially unused gate
+			Gate *driver_gate = driver->get_gate();
+
+			// watch out for unused ports in the netlist
 			if(driver_gate != this) {
+				//unused gate
 				unused->push_back(driver_gate);
+				// trace the inputs of the drver gate to check if the are unused
 				for (auto del=driver_gate->get_inputs()->begin(); del!=driver_gate->get_inputs()->end();del++ ){
 					PortBit *in = *del;
 					todo.push(in);
 				}
 			} else {
+				// unused port
 				driver->disconnect();
 			}
 		}

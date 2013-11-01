@@ -43,15 +43,21 @@ namespace ds_library {
 	typedef std::map<std::string, ds_structural::Gate*> gate_map_t;
 	typedef std::map<std::string, ds_lg::LGNode*> lgn_map_t;
 
-	const std::string value_0 = "0";
-	const std::string value_1 = "1";
-	const std::string value_X = "X";
+	const std::string value_0 = "0";	//!< constant '0'
+	const std::string value_1 = "1";	//!< constant '1'
+	const std::string value_X = "X";	//!< unknown value
 
 	class Library {
 
 	friend class LibraryFactory;
 	public:
 
+	/*!
+	 * queries whether a gate exists
+	 * @param name name of the desired gate
+	 * @param ports number of ports of the desired gate
+	 * @return true if gate exists
+	 */
 	bool has_gate(const std::string& name, const std::size_t ports) {
 		gate_map_t::const_iterator it = gate_map.find(name);
 		bool found = false;
@@ -69,7 +75,13 @@ namespace ds_library {
 		return found;
 	}
 
-	ds_structural::Gate* getGate(const std::string& name, const std::size_t ports) const {
+	/*!
+	 * retrieves a copy of the desired gate according to the prototype design pattern
+	 * @param name name of desired gate
+	 * @param ports number of ports of the desired gate
+	 * @return deep copy of desired gate
+	 */
+	ds_structural::Gate* get_gate(const std::string& name, const std::size_t ports) const {
 		ds_structural::Gate* g = 0;
 		gate_map_t::const_iterator it = gate_map.find(name);
 		if (it != gate_map.end()){
@@ -107,7 +119,14 @@ namespace ds_library {
 		return g;
 	}
 
-	ds_structural::Gate* getGate(const std::string& name, const std::vector<std::string>& ports) const {
+	/*!
+	 * retrieves a copy of the desired gate according to the prototype design pattern
+	 * @param name name of desired gate
+	 * @param ports ports of the desired gate
+	 * @return deep copy of desired gate
+	 */
+
+	ds_structural::Gate* get_gate(const std::string& name, const std::vector<std::string>& ports) const {
 		ds_structural::Gate* g = 0;
 		gate_map_t::const_iterator iterator = gate_map.find(name);
 		if (iterator != gate_map.end()){
@@ -129,15 +148,32 @@ namespace ds_library {
 	virtual ~Library(){close();}
 
 	protected:
-		gate_map_t gate_map;
-		lgn_map_t prototypes;
-		function_map functions;
-		inversion_map inversion;
+		gate_map_t gate_map; 		//!< available gates in the library
+		lgn_map_t prototypes;		//!< simulation primitives
+		function_map functions;		//!< evaluation functions of 2 operands
+		inversion_map inversion;	//!< true when the function entry is to be complemented
+
+		/*!
+		 * populates the gate container in this library.
+		 * Library definitions are searched in the "gate_lib" directory in the DS installation.
+		 * The environmental variable "DS" points to the installation directory
+		 * @param lib_name library name to load
+		 */
 		virtual void load(const std::string &lib_name);
+		/*!
+		 * loads primitive simulation prototypes
+		 */
 		virtual void load_nodes();
+		/*!
+		 * clear the library and deallocates memory. After this call the library is no longer available
+		 */
 		void close();
 
 	private:
+		/*!
+		 * A library may not be created directly. The factory design pattern is sed instead
+		 * @param lib_path path to library definition
+		 */
 		Library(const std::string& lib_path){
 			load_nodes();
 			load(lib_path);
@@ -146,13 +182,16 @@ namespace ds_library {
 
 	typedef std::map<std::string,Library*> library_map_t;
 
+	/*!
+	 * provides access to gate libraries. Implemented after the Singleton design pattern
+	 */
 	class LibraryFactory {
 
 	private:
-		static LibraryFactory* instance;
-		library_map_t map;
+
+		static LibraryFactory* instance;	//!< singleton instance
+		library_map_t map;					//!< available libraries
 		LibraryFactory(){}
-		//~LibraryFactory(){instance = 0;}
 
 	public:
 		static LibraryFactory* getInstance(){
@@ -161,8 +200,17 @@ namespace ds_library {
 			return instance;
 		}
 
-		Library* loadLibrary(const std::string& name="default_lib");
+		/*!
+		 * loads and returns the desired library
+		 * @param name name of desired library
+		 * @return the
+		 */
+		Library* load_library(const std::string& name="default_lib");
 
+		/*!
+		 * clears and deallocates the desired library
+		 * @param name name of the library to remove
+		 */
 		void remove_library(const std::string name = "default_lib"){
 			library_map_t::iterator it = map.find(name);
 			if (it != map.end()){
@@ -172,75 +220,78 @@ namespace ds_library {
 		}
 	};
 
-	ds_structural::NetList* import(const std::string& file, const std::string& toplevel, ds_workspace::Workspace* workspace);
-
-	template<typename Iterator>
-	ds_structural::NetList* import_verilog(Iterator begin, Iterator end, const std::string& toplevel, const Library* lib);
-
+	/*!
+	 * intermediate aggregate representation for verilog parsing
+	 */
 	struct parse_nl_aggregate
 	{
-		int left;
-		int right;
-		std::string name;
+		int left; 	//!< leftmost index
+		int right;	//!< rightmost index
+		std::string name;	//!< name of aggregate
 	};
-
+	/*!
+	* intermediate assignment representation for verilog parsing
+	*/
 	struct parse_nl_assignment
 	{
-		std::string lhs;
-		std::string rhs;
+		std::string lhs; //!< left hand side value
+		std::string rhs; //!< right hand side value
 	};
-
+	/*!
+	 * intermediate implicit instance representation for verilog parsing
+	 */
 	struct parse_nl_implicit_instance
 	{
-		std::string type;
-		std::string name;
-		std::vector<std::string> ports;
+		std::string type;				//!< gate type
+		std::string name;				//!< gate name
+		std::vector<std::string> ports;	//!< actual ports
 	};
-
+	/*!
+	 *  intermediate explicit instance representation for verilog parsing
+	 */
 	struct parse_nl_explicit_instance
 	{
-		std::string type;
-		std::string name;
-		std::map<std::string, std::string> ports;
+		std::string type;							//!< gate type
+		std::string name;							//!< gate name
+		std::map<std::string, std::string> ports;	//!< port map (formal, actual)
 	};
 
 	typedef boost::variant<parse_nl_aggregate, std::string> verilog_declaration;
 	typedef boost::variant<parse_nl_implicit_instance, parse_nl_explicit_instance> verilog_instance;
 
+	/*!
+	 * intermediate netlist representation for verilog parsing
+	 */
 	struct parse_netlist
 	{
-		std::string nl_name;
-		std::vector<std::string> ports;
-		std::vector<verilog_declaration> inputs;
-		std::vector<verilog_declaration> outputs;
-		std::vector<verilog_declaration> inouts;
-		std::vector<verilog_declaration> signals;
-		std::vector<parse_nl_assignment> assignments;
-		std::vector<verilog_instance> instances;
+		std::string nl_name;							//!< netlist name
+		std::vector<std::string> ports;					//!< netlist ports (all)
+		std::vector<verilog_declaration> inputs;		//!< input ports
+		std::vector<verilog_declaration> outputs;		//!< output ports
+		std::vector<verilog_declaration> inouts;		//!< bidirectional ports
+		std::vector<verilog_declaration> signals;		//!< signals
+		std::vector<parse_nl_assignment> assignments;	//!< assignments ('assign' in verilog)
+		std::vector<verilog_instance> instances;		//!< instances, either implicit or explicit
 	};
 
+	/*!
+	 * intermediate node representation for library parsing
+	 */
 	struct parse_lib_node
 	{
-		std::string gate_name;
-		std::string node_name;
-		int outputs;
-		std::map<std::string, std::string> o_mapping;
-		int inputs;
-		std::map<std::string, std::string> i_mapping;
-		bool flexible;
+		std::string gate_name;							//!< library gate name
+		std::string node_name;							//!< primitive simulation node name
+		int outputs;									//!< gate outputs
+		std::map<std::string, std::string> o_mapping;	//!< output mappings between gate and primitive
+		int inputs;										//!< gate inputs
+		std::map<std::string, std::string> i_mapping;	//!< input mappings between gate and primitive
+		bool flexible;									//!< true if variable inputs are allowed
 	};
 }
 
-BOOST_FUSION_ADAPT_STRUCT(
-    ds_library::parse_lib_node,
-    (std::string, gate_name)
-    (std::string, node_name)
-    (int, outputs)
-    (ds_library::fusion_map, o_mapping)
-    (int, inputs)
-    (ds_library::fusion_map, i_mapping)
-    (bool, flexible)
-)
+/*
+ * Wrapper auxiliary structures necessary for boost::qi
+ */
 
 BOOST_FUSION_ADAPT_STRUCT(
     ds_library::parse_nl_aggregate,
@@ -281,10 +332,24 @@ BOOST_FUSION_ADAPT_STRUCT(
 	(std::vector<ds_library::verilog_instance>, instances)
 )
 
+BOOST_FUSION_ADAPT_STRUCT(
+    ds_library::parse_lib_node,
+    (std::string, gate_name)
+    (std::string, node_name)
+    (int, outputs)
+    (ds_library::fusion_map, o_mapping)
+    (int, inputs)
+    (ds_library::fusion_map, i_mapping)
+    (bool, flexible)
+)
+
 namespace ds_library {
 
 	namespace ascii = boost::spirit::ascii;
 
+	/*!
+	 * verilog qi grammar
+	 */
 	template <typename Iterator>
 	struct nxp_verilog_parser : qi::grammar<Iterator,std::vector<ds_library::parse_netlist>(), ascii::space_type>
 	{
@@ -367,6 +432,9 @@ namespace ds_library {
 
 	};
 
+	/*!
+	 * library qi grammar
+	 */
 	template <typename Iterator>
 	struct lib_parser : qi::grammar<Iterator,parse_lib_node()>
 	{
@@ -402,6 +470,9 @@ namespace ds_library {
 		qi::rule<Iterator, parse_lib_node()> start;
 	};
 
+	/*!
+	 * skipper grammar for library parser. Comments start with '#'
+	 */
 	template<typename Iterator>
 	struct lib_skipper : public qi::grammar<Iterator> {
 		lib_skipper() : lib_skipper::base_type(skip) {
@@ -410,14 +481,29 @@ namespace ds_library {
 		qi::rule<Iterator> skip;
 	};
 
+	/*!
+	 * parses a library description. It reads in text between the iterators and fills up the gate and function definitions.
+	 * @param first iterator to the beginning of the line
+	 * @param last iterator to the end of the line
+	 * @param gates gate mappings. Gate definitions are stored here
+	 * @param prototypes definition of simulation primitives. Necessary for gate mappings
+	 * @param functions function mappings. Function definitions are stored here
+	 * @param inversion function inversion. Inversions are stored here
+	 * @return true if line was successfully parsed
+	 */
 	template <typename Iterator>
 	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, function_map& functions, inversion_map& inversion){
 
 		parse_lib_node n;
 		lib_parser<Iterator> p;
 		lib_skipper<Iterator> skipper;
+
+		//parse library
 		bool parse =  boost::spirit::qi::phrase_parse(first, last, p, skipper, n);
 		if (parse){
+
+			// line constains a valid gate definition
+			// perform sanity checks
 			std::size_t num_inputs = n.inputs;
 			std::size_t num_outputs = n.outputs;
 			if (num_inputs != n.i_mapping.size() || num_outputs != n.o_mapping.size())
@@ -426,6 +512,7 @@ namespace ds_library {
 				<< ds_common::errmsg_info("Inconsistent # of inputs/outputs"));
 
 			else {
+				// find an equivalent simulation primitive
 				using ds_structural::Gate;
 				using std::string;
 				lgn_map_t::iterator iterator = prototypes.find(n.node_name);
@@ -435,6 +522,7 @@ namespace ds_library {
 					<< ds_common::errmsg_info("Unknown prototype: " + n.node_name));
 
 				}
+				// create new gate and setup ports and mappings
 				Gate *g = new Gate();
 				g->set_type(n.gate_name);
 				ds_lg::LGNode *proto = iterator->second;
@@ -453,8 +541,15 @@ namespace ds_library {
 					g->add_port(p);
 					g->add_mapping(pb_name, lgn_name);
 				}
+
+				// register gate in the library
 				gates[n.gate_name] = g;
+
+				//take care of variable input funcions/gates
 				if (n.flexible){
+
+					// each function is defined in terms of a function and an inversion flag
+
 					if (n.gate_name == "and"){
 						functions[n.gate_name] = ds_lg::f_and2;
 						inversion[n.gate_name] = false;
@@ -486,32 +581,60 @@ namespace ds_library {
 		return parse;
 	}
 
-	enum LogicGate {
-		AND,
-		OR,
-		NOT,
-		NAND,
-		NOR,
-		BUF,
-		XOR
-	};
+	/*!
+	 * reads in a circuit description and produces a netlist.
+	 * The circuit description is first parsed into an intermediate description using boost:qi.
+	 * Any design dependencies are automotically resolved
+	 * @param file path the file containing the circuit description to elaborate
+	 * @param toplevel name of the netlist to elaborate
+	 * @param workspace design information for gate resolution and dependencies
+	 * @return the elaborated netlist
+	 *
+	 */
+	ds_structural::NetList* import(const std::string& file, const std::string& toplevel, ds_workspace::Workspace* workspace);
 
+	/*!
+	 * tranforms an intermediate netlist repreentation into a netlist
+	 * @param nl intermediate netlist representation
+	 * @param workspace design information for gate resolution and dependencies
+	 * @return the elaborated netlist
+	 */
 	ds_structural::NetList* convert(const ds_library::parse_netlist& nl, ds_workspace::Workspace *workspace);
 
+	/*!
+	 * aggregate visitor (recommended strategy by qi)
+	 */
 	struct aggregate_visitor : boost::static_visitor<void> {
 
-		aggregate_visitor(ds_structural::NetList *nl, const ds_structural::PortType& pt):create_port(true), netlist(nl), type(pt){}
+		bool create_port; 	//!< true if a port is also created
 
+		/*!
+		 * initializes a few parameters used for every created aggregate (port or signal)
+		 * @param nl owner netlist
+		 * @param pt port type created by this visitor
+		 */
+		aggregate_visitor(ds_structural::NetList *nl, const ds_structural::PortType& pt):create_port(true),
+				netlist(nl), type(pt){}
+
+		/*!
+		 * sets the port type used for every aggregate created by this visitor
+		 */
 		void set_port_type(const ds_structural::PortType& t){
 			type = t;
 		}
 
-		bool create_port;
-
+		/*!
+		 * creates a single port or signal in the netlist
+		 * @param name name of port or signal to create
+		 */
 		void operator()(const std::string& name){
 	           visit(name);
 		}
 
+		/*!
+		 * creates a range of ports or signals in the netlist
+		 * @param s range of ports or signals to create
+		 */
 		void operator()(const ds_library::parse_nl_aggregate& s){
 			int low  = s.left > s.right ? s.right : s.left;
 			int high = s.left < s.right ? s.right : s.left;
@@ -526,9 +649,13 @@ namespace ds_library {
 
 	private:
 
-		ds_structural::NetList *netlist;
-		ds_structural::PortType type;
+		ds_structural::NetList *netlist;	//!< owner netlist
+		ds_structural::PortType type;		//!< port type to be created
 
+		/*!
+		 * creates a signal with the specified name in the netlist.
+		 * When the create_port flag is active a port is also created with the same name
+		 */
 		void visit(const std::string& name){
 			ds_structural::Signal *s = new ds_structural::Signal(name);
 			netlist->add_signal(s);
@@ -542,33 +669,80 @@ namespace ds_library {
 		}
 	};
 
+	/*!
+	 * instance visitor (recommended strategy by qi)
+	 */
 	struct instance_visitor : boost::static_visitor<void> {
 
-		ds_structural::NetList *netlist;
-		ds_workspace::Workspace *wp;
+		ds_structural::NetList *netlist;	//!< owner netlist (all instances are added here)
+		ds_workspace::Workspace *wp;		//!< design info for resolution
 
+		/*!
+		 * sets up the netlist where instances are stored and keeps a reference to the workspace for gate and dependency resolution
+		 * @param nl owner netlist
+		 * @param w workspace for resolution
+		 */
 		instance_visitor(ds_structural::NetList *n, ds_workspace::Workspace *w):netlist(n),wp(w) {}
 
+		/*!
+		 * creates and connects a gate instantiated explicitly
+		 * @param instance explicit intermediate gate representation
+		 */
 		void operator()(const ds_library::parse_nl_explicit_instance& instance);
 
+		/*!
+		* creates and connects a gate instantiated implicitly
+		* @param instance implicit intermediate gate representation
+		*/
 		void operator()(const ds_library::parse_nl_implicit_instance& implicit);
 	};
 
+	/*!
+	 * keeps track of design dependencies. Queries the workspace to resolve all instances
+	 */
 	struct dependency_visitor : boost::static_visitor<void> {
 
+		/*!
+		 * all dependencies (<design name, # of ports> depends on <design_name, # of ports>)
+		 */
 		std::multimap<std::pair<std::string, int> , std::pair<std::string, int> > dep_map;
-		std::set<std::pair<std::string, int> >dependencies;
-		std::pair<std::string, int> design;
-		ds_workspace::Workspace *wp;
+		std::set<std::pair<std::string, int> >dependencies;  //!< dependencies of the current design
+		std::pair<std::string, int> design; //!< current design (name, # of ports)
+		ds_workspace::Workspace *wp; //!< workspace for gate and netlist resolution
 
+		/*!
+		 * keeps a pointer to the workspace
+		 * @param worskpace
+		 */
 		dependency_visitor(ds_workspace::Workspace *w):wp(w) {}
 
+		/*!
+		 * check the dependencies of an explicit instance. Unimplemented so far
+		 * @param instance implicit instance to check
+		 */
 		void operator()(const ds_library::parse_nl_explicit_instance& instance);
 
+		/*!
+		 * check the dependencies of an implicit instance
+		 * @param instance explicit instance to check
+		 */
 		void operator()(const ds_library::parse_nl_implicit_instance& implicit);
 	};
 
 	bool parse_verilog(const std::string& name, std::vector<parse_netlist>& netlists);
+
+	/*!
+	 * generic logic gates
+	 */
+	enum LogicGate {
+		AND,
+		OR,
+		NOT,
+		NAND,
+		NOR,
+		BUF,
+		XOR
+	};
 }
 
 

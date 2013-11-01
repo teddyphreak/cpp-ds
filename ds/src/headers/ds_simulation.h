@@ -18,9 +18,6 @@ namespace ds_simulation {
 		BIT_X,
 		BIT_UD
 	};
-
-
-
 }
 
 

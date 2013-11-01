@@ -10,29 +10,30 @@
 #include "ds_library.h"
 #include "ds_lg.h"
 #include "ds_pattern.h"
+#include "ds_faults.h"
 #include "boost/multi_array.hpp"
 
 namespace ds_lg {
 
-	lg_v64** LGNode1I::get_binding(const std::string& name) {
+	lg_v64** LGNode1I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		return 0;
 	}
 
-	lg_v64** LGNode2I::get_binding(const std::string& name) {
+	lg_v64** LGNode2I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		return 0;
 	}
 
-	lg_v64** LGNode3I::get_binding(const std::string& name) {
+	lg_v64** LGNode3I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
 		return 0;
 	}
 
-	lg_v64** LGNode4I::get_binding(const std::string& name) {
+	lg_v64** LGNode4I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
@@ -40,7 +41,7 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGNode5I::get_binding(const std::string& name) {
+	lg_v64** LGNode5I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
@@ -49,7 +50,7 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGNode6I::get_binding(const std::string& name) {
+	lg_v64** LGNode6I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
@@ -59,7 +60,7 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGNode7I::get_binding(const std::string& name) {
+	lg_v64** LGNode7I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
@@ -70,7 +71,7 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGNode8I::get_binding(const std::string& name) {
+	lg_v64** LGNode8I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		if (name == "b")return &b;
 		if (name == "c")return &c;
@@ -82,13 +83,13 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGState::get_binding(const std::string& name) {
+	lg_v64** LGState::get_input(const std::string& name) {
 		if (name == "D")return &d;
 		if (name == "CD")return &cd;
 		return 0;
 	}
 
-	lg_v64** LGNodeArr::get_binding(const std::string& name) {
+	lg_v64** LGNodeArr::get_input(const std::string& name) {
 
 		char c = name[0];
 		std::size_t disp = c - 'a';
@@ -140,6 +141,7 @@ namespace ds_lg {
 
 	void LeveledGraph::adapt(const ds_pattern::CombinationalPatternAdapter* adapter){
 
+		// prepare input for simulation: set pattern block and offset
 		for (Input* in:inputs){
 			in->set_pattern_block(&pattern_block);
 			std::string name = in->get_name();
@@ -147,7 +149,7 @@ namespace ds_lg {
 			std::size_t offset = adapter->get_offset(port_name);
 			in->set_offset(offset);
 		}
-
+		// prepare outputs for simulation: create observers and attach them to outputs
 		for (Output* out:outputs){
 			std::string name = out->get_name();
 			std::string port_name = name.substr(name.find('/') + 1);
@@ -159,11 +161,21 @@ namespace ds_lg {
 
 
 	void LeveledGraph::sim(ds_pattern::SimPatternBlock *pb){
-
 		pattern_block = pb;
+		//propagates events from in level order from inputs to outputs
 		for (auto it=nodes.begin();it!=nodes.end();it++){
 			LGNode *n = *it;
 			n->propagate();
 		}
+		//inject hooks
+		for (ds_faults::SimulationHook* h: hooks){
+			h->hook(this);
+		}
+		//propagate hooks
+		for (auto it=nodes.begin();it!=nodes.end();it++){
+			LGNode *n = *it;
+			n->propagate();
+		}
+
 	}
 }
