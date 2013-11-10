@@ -416,6 +416,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		for (;it!=set->end();it++){
 			LGNode *n = *it;
 			lg->nodes.push_back(n);
+			n->set_leveled_graph(lg);
 		}
 		delete set;
 	}

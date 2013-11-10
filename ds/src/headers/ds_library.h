@@ -36,12 +36,29 @@ namespace ds_workspace {
 
 namespace ds_library {
 
+	/*!
+	 * generic logic functions
+	 */
+	enum LogicFunction {
+		AND,
+		OR,
+		NOT,
+		NAND,
+		NOR,
+		BUF,
+		XOR,
+		XNOR,
+		MUX,
+		UNKNOWN,
+	};
+
 	namespace qi = boost::spirit::qi;
 	typedef std::map<std::string, ds_lg::bi_eval> function_map;
 	typedef std::map<std::string, bool> inversion_map;
 	typedef std::map<std::string, std::string> fusion_map;
 	typedef std::map<std::string, ds_structural::Gate*> gate_map_t;
 	typedef std::map<std::string, ds_lg::LGNode*> lgn_map_t;
+	typedef std::map<std::string, ds_library::LogicFunction> type_map_t;
 
 	const std::string value_0 = "0";	//!< constant '0'
 	const std::string value_1 = "1";	//!< constant '1'
@@ -73,6 +90,18 @@ namespace ds_library {
 			}
 		}
 		return found;
+	}
+
+	/*!
+	 * returns logic function of a given gate type
+	 * @param t gate type to query
+	 * @return logic function implemented by gate type
+	 */
+	ds_library::LogicFunction get_function(const std::string& t){
+		if (types.find(t)!= types.end())
+			return types[t];
+		else
+			return ds_library::UNKNOWN;
 	}
 
 	/*!
@@ -150,6 +179,7 @@ namespace ds_library {
 	protected:
 		gate_map_t gate_map; 		//!< available gates in the library
 		lgn_map_t prototypes;		//!< simulation primitives
+		type_map_t types;			//!< boolean logic implemented by each function
 		function_map functions;		//!< evaluation functions of 2 operands
 		inversion_map inversion;	//!< true when the function entry is to be complemented
 
@@ -492,7 +522,7 @@ namespace ds_library {
 	 * @return true if line was successfully parsed
 	 */
 	template <typename Iterator>
-	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, function_map& functions, inversion_map& inversion){
+	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, type_map_t types, function_map& functions, inversion_map& inversion){
 
 		parse_lib_node n;
 		lib_parser<Iterator> p;
@@ -544,6 +574,9 @@ namespace ds_library {
 
 				// register gate in the library
 				gates[n.gate_name] = g;
+
+				//register function type
+				types[n.gate_name] = types[n.node_name];
 
 				//take care of variable input funcions/gates
 				if (n.flexible){
@@ -731,18 +764,6 @@ namespace ds_library {
 
 	bool parse_verilog(const std::string& name, std::vector<parse_netlist>& netlists);
 
-	/*!
-	 * generic logic gates
-	 */
-	enum LogicGate {
-		AND,
-		OR,
-		NOT,
-		NAND,
-		NOR,
-		BUF,
-		XOR
-	};
 }
 
 

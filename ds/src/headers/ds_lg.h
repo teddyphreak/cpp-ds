@@ -223,10 +223,11 @@ namespace ds_lg {
 	 */
 	class LGNode {
 	public:
-		std::size_t level;						//!< level in the graph
+		int level;						//!< level in the graph
 		ds_structural::Gate *gate;				//!< equivalent gate in netlist
 		std::vector<LGNode*> outputs;			//!< output nodes
 		std::vector<LGNode*> inputs;			//!< input nodes
+		std::vector<ds_faults::SimulationHook*> hooks;
 		/*!
 		 * initializes public members. By default the node is not an endpoint.
 		 * @param t node type
@@ -247,13 +248,22 @@ namespace ds_lg {
 		 */
 		virtual void sim()=0;
 		/*!
+		 * Calculation of simulation values with fault injection. Derived classes override this method to calculate the value of this node's outputs
+		 * by evaluating this node's inputs and faults
+		 */
+		virtual void hook()=0;
+		/*!
 		 * simulation procedure. The current output values is first stored, then new values are calculated.
 		 * Any attached observed is activated at this point. An event may propagated if any node output changed its value
+		 * @param intermediate intermediate simulation. Hooks are activated
 		 * @return true if an event is propagated to the output nodes
 		 */
-		virtual bool propagate() {
+		virtual bool propagate(bool intermediate) {
 			bo = o;		// save current state
-			sim();		// calculate new values
+			if (intermediate)
+				hook();		// handle hooks and calculate new values
+			else
+				sim();		// calculate new values
 			for (monitor_container::iterator it = monitors.begin();it!=monitors.end();it++){
 				Monitor *m = *it;
 				m->observe(o);		// log any simulation events
@@ -321,18 +331,30 @@ namespace ds_lg {
 		 * @return a copy of the value of the node's output
 		 */
 		lg_v64 peek() const {return o;}
-
 		/*!
 		 * revert output to previous value
 		 */
 		virtual void rollback(){o = bo;}
 
+		void set_leveled_graph(LeveledGraph *graph) {
+			lg = graph;
+		}
+
 	protected:
 		lg_v64 o; 						//!< node output
 		lg_v64 bo;						//!< backup node output
-		bool endpoint;					//!< true if thid node is an endpoint
+		bool endpoint;					//!< true if this node is an endpoint
 		std::string type;				//!< node type
 		monitor_container monitors;		//!< monitor container
+		LeveledGraph* lg;
+		/*!
+		 * Processes all hooks at the input ports. Commodity function
+		 */
+		void hook_inputs();
+		/*!
+		 * processes all hooks at the output ports. Commodity function
+		 */
+		void hook_outputs();
 	};
 
 	/*!
@@ -359,6 +381,10 @@ namespace ds_lg {
 		virtual void sim() {
 			o = *a;
 		}
+		/*!
+		 * simulation value is forwarded form input to output. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * default values: this node is an endpoint and its type is initialized to "output"
 		 */
@@ -406,6 +432,10 @@ namespace ds_lg {
 			o.x = (*pb)->values[offset].x;
 		}
 		/*!
+		 * simulation value is forwarded form input to output. Faults are injected
+		 */
+		virtual void hook();
+		/*!
 		 * default values: this node is an endpoint and its type is initialized to "input"
 		 */
 		Input():LGNode("input"){};
@@ -447,7 +477,14 @@ namespace ds_lg {
 		lg_v64 *a;					//!< single input
 		lg_v64 (*A)(val64_cpc a);	//!< pointer to a function expecting 1 simulation value and returning 1 simulation value
 	public:
+		/*!
+		 * Simulation primitive for single-input gates
+		 */
 		virtual void sim() {o = (*A)(a);}
+		/*!
+		 * calculate output value by evaluating simulation function with 1 input. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
@@ -479,6 +516,10 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 2 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b);}
+		/*!
+		 * calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
+		 */
+		virtual void hook();
 		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
@@ -513,6 +554,10 @@ namespace ds_lg {
 		 */
 		virtual void sim() {o = (*A)(a,b,c);}
 		/*!
+		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
+		 */
+		virtual void hook();
+		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
 		 * @param AA simulation function
@@ -546,6 +591,10 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 4 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d);}
+		/*!
+		 * Simulation primitive for 4-input gates. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
@@ -582,6 +631,10 @@ namespace ds_lg {
 		 */
 		virtual void sim() { o = (*A)(a,b,c,d,e);}
 		/*!
+		 * Simulation primitive for 5-input gates. Faults are injected
+		 */
+		virtual void hook();
+		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
 		 * @param AA simulation function
@@ -617,6 +670,10 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 6 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d,e,f);}
+		/*!
+		 * Simulation primitive for 6-input gates. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
@@ -655,6 +712,10 @@ namespace ds_lg {
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d,e,f,g);}
 		/*!
+		 * Simulation primitive for 7-input gates. Faults are injected
+		 */
+		virtual void hook();
+		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
 		 * @param AA simulation function
@@ -692,6 +753,10 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 8 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d,e,f,g,h);}
+		/*!
+		 * Simulation primitive for 8-input gates. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
 		 * @param t gate type
@@ -732,6 +797,10 @@ namespace ds_lg {
 			if(invert)
 				o = ~o;
 		}
+		/*!
+		 * Simulation primitive for variable-input gates. Faults are injected
+		 */
+		virtual void hook();
 		/*!
 		 * by default this node is not an endpoint. The constructor initializes the node type, the simulation function, the number of inputs and the inversion flag.
 		 * It also allocates space for the input array
@@ -780,6 +849,10 @@ namespace ds_lg {
 			 * update outputs when clk event is active
 			 */
 			virtual void sim() { /*TODO*/ }
+			/*!
+			 * Simulation primitive state gates. Faults are injected
+			 */
+			virtual void hook() {/* TODO */ };
 			/*!
 			 * initializes node type. This gate is an endpoint.
 			 * @param t node type
@@ -917,7 +990,7 @@ namespace ds_lg {
 		void push_node(LGNode *node){simulation[node->level].push_back(node);}
 
 	protected:
-		std::size_t num_levels;										//!< number of levels in the graph
+		std::size_t num_levels;								//!< number of levels in the graph
 		ds_pattern::SimPatternBlock *pattern_block; 		//!< current pattern block for simulation
 		std::vector<lg_node_iterator> levels;				//!< level iterators. Two iterators define the nodes in a level
 		std::vector<lg_node_container> simulation;			//!< nodes to evaluate during intermediate simulation

@@ -83,6 +83,18 @@ namespace ds_workspace {
 			return g;
 		}
 
+		ds_library::LogicFunction get_function(const std::string& gate_type){
+			ds_library::LogicFunction v = ds_library::UNKNOWN;
+			for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
+				ds_library::Library *l = *lib_it;
+				v = l->get_function(gate_type);
+				if (v != ds_library::UNKNOWN)
+					break;
+			}
+			return v;
+		}
+
+
 		/*!
 		 * searches for a gate in all available libraries. If a gate with the desired name and number of ports is found
 		 * a copy of the library gate is returned according to the prototype design pattern

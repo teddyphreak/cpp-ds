@@ -127,7 +127,6 @@ namespace ds_structural {
 		~PortBit();
 
 	};
-
 	/*!
 	 * represents connections between ports. It contains a signal name and a container of attached ports.
 	 * A signal may also hold a predefined value for simulation
@@ -485,7 +484,26 @@ namespace ds_structural {
 		 * @param cone port bits in the output cone
 		 */
 		void get_output_cone(PortBit *pb, std::set<PortBit*> *cone);
-
+		/*!
+		 * stores all gate pointers in this netlist into the specified container
+		 * @param container array where gates are stored
+		 */
+		void get_gates(std::vector<Gate*>& container) const {
+			for (auto it= gates.begin();it!=gates.end();it++){
+				Gate* g = it->second;
+				container.push_back(g);
+			}
+		}
+		/*!
+		 * stores all gate pointers in this netlist into the specified container
+		 * @param container array where gates are stored
+		 */
+		void get_signals(std::vector<Signal*>& container) const {
+			for (auto it= signals.begin();it!=signals.end();it++){
+				Signal* s = it->second;
+				container.push_back(s);
+			}
+		}
 		/*!
 		 * netlist destructor. It deletes its internal signals and gates
 		 */

@@ -16,58 +16,76 @@ namespace ds_faults {
  * this interface identifies the a pin in a leveled graph
  */
 class PinReference {
+public:
 	/*!
-	 * returns the node name of this pin
+	 * returns the gate name of this pin
 	 * @param lg working leveled graph
 	 * @return
 	 */
-	virtual std::string get_node_name(ds_lg::LeveledGraph* lg)=0;
+	virtual std::string get_gate_name() const = 0;
 	/*!
 	 * returns the netlist port name
 	 * @param lg working leveled graph
 	 * @return
 	 */
-	virtual std::string get_port_name(ds_lg::LeveledGraph* lg)=0;
+	virtual std::string get_port_name() const = 0;
 	/*!
 	 * returns the qualified name of this pin (with gate hierarchy)
 	 * @return
 	 */
-	virtual std::string get_qualified_name()=0;
+	virtual std::string get_qualified_name() const =0;
 	/*!
 	 * true if pin is an input
 	 * @return
 	 */
-	virtual bool is_input() = 0;
+	virtual bool is_input() const = 0;
 	/*!
 	 * returns true if pin is an output
 	 * @return
 	 */
-	virtual bool is_output() = 0;
+	virtual bool is_output() const = 0;
 };
 
-/*!
- * This callback method is executed after the first simulation pass to activate a fault
- */
+ds_lg::lg_v64* resolve(const PinReference *pr, ds_lg::LeveledGraph *lg);
+
 class SimulationHook{
 public:
-	virtual ds_lg::LGNode* hook(ds_lg::LeveledGraph* lg)=0;
+	/*!
+	 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
+	 * @return 1 in bit position i if fault is active in slot i
+	 */
+	virtual ds_lg::int64 hook(ds_lg::LeveledGraph *lg) const = 0;
+	/*!
+	 * returns the port name in the leveled graph node where the fault is inserted
+	 * @return
+	 */
+	virtual std::string get_hook_port() const;
+	/*!
+	 * returns the leveled graph node where the fault is iserted
+	 * @return
+	 */
+	virtual ds_lg::LGNode* get_hook_node() const;
 };
 
 /*!
- * Conditional fault. Only active if its activation condition evaluates to true.
+ * Static faults depend only the the current logic state of the circuit. They are well-suited for combinational simulation.
+ * Static faults are active if the specified nodes in the leveled graph have certain logic values
  */
-class ConditionalFault : public SimulationHook{
+class StaticFault : public SimulationHook, public PinReference {
 protected:
-	ds_lg::lg_v64* victim;			//!< victim value in the leveled graph
-	ds_lg::int64 mask;				//!< fault is only is mask bit position is true
+
+	std::string node_name;						//!< node name
+	std::string node_port_name;					//!< node port name
+	bool isInput;								//!< true if input port
+	bool isOutput;								//!< true if output port
+	std::vector<const PinReference*> aggressors;		//!< list of simulation primitives to observe
+	std::vector<ds_lg::lg_v64> polarity;		//!< conditions for the simulation primitives
+	ds_lg::int64 mask;							//!< fault is only is mask bit position is true
+
+	std::string gate_name;
+	std::string gate_port_name;
 public:
 
-	/*!
-	 * victim pointer and mask are initialized
-	 * @param v victim primitive value
-	 * @param mask mask
-	 */
-	ConditionalFault(ds_lg::lg_v64* v, ds_lg::int64 m): victim(v), mask(m){}
 	/*
 	 * mask setter and getter
 	 */
@@ -78,186 +96,98 @@ public:
 		mask = m;
 	}
 	/*!
-	 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
-	 * @return true if fault is active
-	 */
-	virtual ds_lg::int64 activate()=0;
-	/*!
-	 * changes the simulation value in the leveled graph if the activation condition is met
-	 * @param nl netlist
-	 * @returns pointer to the binded node where the fault is activated. Null pointer of the fault is not activated
-	 */
-	virtual ds_lg::LGNode* hook(ds_lg::LeveledGraph* lg){
-		ds_lg::LGNode* n = bind(lg);
-		ds_lg::int64 a = activate();
-		if (a!=0){
-			victim->v = victim->v ^ (a & mask);
-			return n;
-		}
-		return 0;
-	}
-	/**!
-	 * finds victim primitive in the provided leveled graph
-	 * @param lg leveled graph where the fault is injected
-	 */
-	virtual ds_lg::LGNode* bind(ds_lg::LeveledGraph* lg)=0;
-};
-
-/*!
- * Static faults depend only the the current logic state of the circuit. They are well-suited for combinational simulation.
- * Static faults are active if the specified nodes in the leveled graph have certain logic values
- */
-class StaticFault : public ConditionalFault, PinReference {
-protected:
-	std::string node_name;							//!< node name
-	std::string port_name;							//!< node port name
-	bool isInput;								//!< true if input port
-	bool isOutput;								//!< true if output port
-	std::vector<ds_lg::lg_v64*> aggressors;		//!< list of simulation primitives to observe
-	std::vector<ds_lg::lg_v64> polarity;		//!< conditions for the simulation primitives
-public:
-
-	/*!
 	 * constructs a static fault for simulation. This intermediate fault representation can be injected into any
 	 * compatible leveled graph instance produced by the same netlist
 	 * @param nl netlist for name resolution
 	 * @param g gate name in netlist
 	 * @param p port name in gate
 	 */
-	StaticFault(ds_structural::NetList* nl, std::string g, std::string p):ConditionalFault(0,-1L),isInput(false),isOutput(false){
+	StaticFault(ds_structural::NetList* nl, std::string g, std::string p):isInput(false),isOutput(false),mask(-1L),gate_name(g),gate_port_name(p){
 
-		using ds_structural::Gate;
-		using ds_lg::LGNode;
-		using ds_lg::lg_v64;
-
-		Gate *component = nl->find_gate(g);
-		LGNode *n = component->get_lgn();
-		// save port name
-		node_name = n->get_name();
-		//translate port name in the netlist to primitive node name
-		std::string port_name = component->get_mapping(p);
-		// find an output
-		if (n->get_output(port_name)==0){
-			//no output found, try an input
-			if (n->get_input(port_name)!=0){
+		if (g == nl->get_instance_name()){
+			node_name = p;
+			ds_structural::PortBit *pb = nl->find_port_by_name(p);
+			if (pb->get_type()==ds_structural::DIR_IN){
 				isInput = true;
 			}
+			if (pb->get_type()==ds_structural::DIR_OUT){
+				isOutput = true;
+			}
 		} else {
-			isOutput = true;
+
+			ds_structural::Gate *gate = nl->find_gate(gate_name);
+			node_name = gate_name;
+			//translate port name in the netlist to primitive node name
+			std::string port_node_name = gate->get_mapping(gate_port_name);
+			ds_structural::PortBit *pb = gate->find_port_by_name(gate_port_name);
+			if (pb->get_type()==ds_structural::DIR_IN){
+				isInput = true;
+			}
+			if (pb->get_type()==ds_structural::DIR_OUT){
+				isOutput = true;
+			}
 		}
 	}
 
-	virtual ds_lg::LGNode* bind(ds_lg::LeveledGraph* lg){
-		using ds_structural::Gate;
-		using ds_lg::LGNode;
-		using ds_lg::lg_v64;
-		LGNode *n = lg->get_node(node_name);
-		// find an output
-		victim = n->get_output(port_name);
-		if (victim==0){
-			//no output found, try an input
-			victim = *n->get_input(port_name);
-			return n;
-
-		}
-		return 0;
+	virtual ds_lg::LGNode* get_hook_node(ds_lg::LeveledGraph* lg) const {
+		ds_lg::LGNode *n = lg->get_node(node_name);
+		return n;
 	}
-
 	/*!
 	 * A fault is active if all conditions for the observed nodes are true.
 	 * If an 'X' value is specified in the condition, it evaluates to true if the observed values is also an 'X' and logic values are ignored.
 	 * Otherwise, it is checked if the logical value in the simulation primitive matches that specified in the condition
 	 * @return true if static fault is active
 	 */
-	virtual ds_lg::int64 activate(){
+	virtual ds_lg::int64 hook(ds_lg::LeveledGraph* lg) const{
 		ds_lg::int64 active = 0L;
 		for(std::size_t i=0;i<aggressors.size();i++){
+			ds_lg::lg_v64 *agg_value = ds_faults::resolve(aggressors[i], lg);
 			if (polarity[i].x != 0){
-				active &= aggressors[i]->x ^ polarity[i].x;
+				active &= agg_value->x ^ polarity[i].x;
 			} else {
-				active &= (aggressors[i]->v ^ polarity[i].v) ;
+				active &= agg_value->v ^ polarity[i].v ;
 			}
 		}
 		return active;
 	}
 	/*!
 	 * adds a new node to observe, together with its required value for fault activation
-	 * @param value simulation primitive to observe
-	 * @param p required simulation value
+	 * @param pin to observe
+	 * @param v required simulation value
 	 */
-	void add_condition(ds_lg::lg_v64* value, const ds_simulation::Value& p){
-		if (p==ds_simulation::BIT_X){
-			aggressors.push_back(value);
+	void add_condition(const PinReference* pin, const ds_simulation::Value& v){
+		if (v==ds_simulation::BIT_X){
+			aggressors.push_back(pin);
 			polarity.push_back(ds_lg::lg_v64(0L,-1L));
-		} else if (p==ds_simulation::BIT_0){
-			aggressors.push_back(value);
+		} else if (v==ds_simulation::BIT_0){
+			aggressors.push_back(pin);
 			polarity.push_back(ds_lg::lg_v64(0L,0L));
-		} else if (p==ds_simulation::BIT_1){
-			aggressors.push_back(value);
+		} else if (v==ds_simulation::BIT_1){
+			aggressors.push_back(pin);
 			polarity.push_back(ds_lg::lg_v64(-1L,0L));
 		}
 	}
 
 	/*!
 	 * queries the name of the equivalent gate in the netlist
-	 * @param lg working leveled graph
 	 * @return name of the equivalent gate in the netlist
 	 */
-	virtual std::string get_node_name(ds_lg::LeveledGraph* lg){
-		ds_lg::LGNode *n = lg->get_node(node_name);
-		return n->get_name();
+	virtual std::string get_gate_name() const{
+		return gate_name;
 	}
-
 	/*!
 	 * queries the name of the equivalent port in the netlist
-	 * @param lg working leveled graph
 	 * @return name of the equivalent port in the netlist
 	 */
-	virtual std::string get_port_name(ds_lg::LeveledGraph* lg){
-		ds_structural::PortBit *pb = get_port_bit(lg);
-		if (pb!=0)
-			return pb->get_instance_name();
-		return "";
+	virtual std::string get_port_name() const{
+		return gate_port_name;
 	}
-	virtual std::string get_qualified_name(ds_lg::LeveledGraph* lg){
-		ds_structural::PortBit *pb = get_port_bit(lg);
-		if (pb!=0)
-			return pb->get_qualified_name();
-		return "";
+	virtual std::string get_qualified_name() const {
+		return gate_name + "/" + gate_port_name;
 	}
 	virtual bool is_input(){return isInput;}
 	virtual bool is_output(){return isOutput;}
-
-protected:
-	/*!
-	 * finds the equivalent port bit in the netlist
-	 * @param lg working leveled graph
-	 * @return
-	 */
-	ds_structural::PortBit* get_port_bit(ds_lg::LeveledGraph* lg){
-		ds_lg::LGNode *n = lg->get_node(node_name);
-		// identify gate
-		ds_structural::Gate *g = n->get_gate();
-
-		// mappings are unidirectional, name of port has to be searched explicitly
-		// search input ports
-		const ds_structural::port_container *ports = g->get_inputs();
-		auto port = std::find_if(ports->begin(), ports->end(),
-				[&](ds_structural::PortBit* p) {
-				return g->get_instance_name() == p->get_instance_name();
-		});
-		if (port != ports->end())
-			return *port;
-		// no matching port found: search input ports
-		ports = g->get_outputs();
-		port = std::find_if(ports->begin(), ports->end(),
-				[&](ds_structural::PortBit* p) {
-				return g->get_instance_name() == p->get_instance_name();
-		});
-		if (port != ports->end())
-			return *port;
-		return 0;
-	}
 };
 
 /*!
@@ -275,15 +205,75 @@ class StuckAt : public StaticFault {
 	 * @param p port name
 	 * @param v stuck-at value. Behavior is undefined if 'X' is provided
 	 */
-	StuckAt(ds_structural::NetList* nl, std::string g, std::string p, ds_simulation::Value v):StaticFault(nl,g,p),value(v){
-		if (victim!=0){
-			add_condition(victim, value);
-		}
-
+	StuckAt(ds_structural::NetList* nl, std::string g, std::string p, ds_simulation::Value v):StaticFault(nl,g,p),value(ds_simulation::BIT_X){
+		if (v == ds_simulation::BIT_0){
+			value = ds_simulation::BIT_1;
+		} else if (v == ds_simulation::BIT_1)
+			value = ds_simulation::BIT_0;
+		add_condition(this,value);
 	}
 };
 
+/*!
+ * Descriptor of a stuck-at fault.
+ * It holds the gate name, port name and stuck-at value
+ */
+struct SAFaultDescriptor {
+	std::string gate_name;	//!< gate name in the netlist where the fault resides
+	std::string port_name;	//!< netlist name of the port where the fault is injected
+	ds_simulation::Value value;	//!< stuck-at fault value. Undefined behavior for 'X'
+	SAFaultDescriptor(): gate_name(""), port_name(""), value(ds_simulation::BIT_X){}
+	SAFaultDescriptor(std::string g, std::string p, ds_simulation::Value v): gate_name(g), port_name(p), value(v){}
+	SAFaultDescriptor(const SAFaultDescriptor& d): gate_name(d.gate_name), port_name(d.port_name), value(d.value){}
+	/*!
+	 * returns a string representation of this descriptor
+	 * @return
+	 */
+	std::string get_string() const {
+		std::string v = value == ds_simulation::BIT_0 ? "0" : "1";
+		return gate_name + "/" + port_name + ":" + v;
+	}
+	/*!
+	 * defines a strict weak ordering for fault descriptors
+	 * @param f
+	 * @return true if this descriptor is less than the argument
+	 */
+	bool operator<(const SAFaultDescriptor& f) const {
+		return get_string() < f.get_string();
+	}
+};
+
+/*!
+ * gets all equivalence fault classes of a gate
+ * @param g gate to process
+ * @param fault_class fault classes are inserted in this container. Each entry in the container has a list of equivalent faults
+ */
+void get_fault_classes(ds_structural::Gate* g, std::vector<std::list<SAFaultDescriptor> >& fault_class);
+
+/*!
+ * gets equivalent fault classes of a given gate. The function tyoe of the gate is queried in the workspace. The first definition in any
+ * available library is used. Equivalent faults are identified and pushed into the same class.
+ * @param g gate to process
+ * @param c controlling value of gate
+ * @param i inverting value of gate
+ * @param fault_class fault classes are inserted in this container. Each entry in the container has a list of equivalent faults
+ */
+void get_gate_faults(ds_structural::Gate* g, ds_simulation::Value c, ds_simulation::Value i, std::vector<std::list<SAFaultDescriptor> >& fault_class);
+
+/*!
+ * generates one stuck-at-0 and one stuck-at-1 fault for each of the provided ports
+ * @param begin iterator pointing at the first port to be processed
+ * @param end iterator pointing at the last port to be processed
+ * @param fault_classes fault classes are inserted in this container. Each entry in the container has a list of equivalent faults
+ */
+void get_port_faults(ds_structural::port_container::const_iterator begin, ds_structural::port_container::const_iterator end, std::vector<std::list<SAFaultDescriptor> >& fault_classes);
+
+/*!
+ * gets all fault classes of a netlist after fault collapsing
+ * @param nl netlist to process
+ * @param fault_class fault classes are inserted in this container. Each entry in the container has a list of equivalent faults
+ */
+void get_fault_classes(ds_structural::NetList* nl, std::map<SAFaultDescriptor, std::list<SAFaultDescriptor> >& fault_class);
+
 }
-
-
 #endif /* DS_FAULTS_H_ */

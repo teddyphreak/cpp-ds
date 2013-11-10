@@ -15,6 +15,26 @@
 
 namespace ds_lg {
 
+	void LGNode::hook_inputs(){
+		for (ds_faults::SimulationHook *h : hooks){
+			lg_v64* p_port = *get_input(h->get_hook_port());
+			if (p_port!=0){
+				int64 activation = h->hook(lg);
+				p_port->v ^= p_port->v & activation & ~p_port->x;
+			}
+		}
+	}
+
+	void LGNode::hook_outputs(){
+		for (ds_faults::SimulationHook *h : hooks){
+			lg_v64* p_port = get_output(h->get_hook_port());
+			if (p_port!=0){
+				int64 activation = h->hook(lg);
+				p_port->v ^= p_port->v & activation & ~p_port->x;
+			}
+		}
+	}
+
 	lg_v64** LGNode1I::get_input(const std::string& name) {
 		if (name == "a")return &a;
 		return 0;
@@ -100,6 +120,229 @@ namespace ds_lg {
 
 	}
 
+	void Output::hook() {
+		sim();
+		for (ds_faults::SimulationHook *h : hooks){
+			o.v ^=  h->hook(lg) & ~o.x;
+		}
+	}
+
+	void Input::hook() {
+		sim();
+		for (ds_faults::SimulationHook *h : hooks){
+			o.v ^=  h->hook(lg) & ~o.x;
+		}
+	}
+
+	void LGNode1I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+	}
+
+	void LGNode2I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+	}
+
+	void LGNode3I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+	}
+
+	void LGNode4I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+		d = sd;
+	}
+
+	void LGNode5I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		lg_v64 *se = e;
+		lg_v64 ve = *e;
+		e = &ve;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+		d = sd;
+		e = se;
+	}
+
+	void LGNode6I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		lg_v64 *se = e;
+		lg_v64 ve = *e;
+		e = &ve;
+		lg_v64 *sf = f;
+		lg_v64 vf = *f;
+		f = &vf;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+		d = sd;
+		e = se;
+		f = sf;
+	}
+
+	void LGNode7I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		lg_v64 *se = e;
+		lg_v64 ve = *e;
+		e = &ve;
+		lg_v64 *sf = f;
+		lg_v64 vf = *f;
+		f = &vf;
+		lg_v64 *sg = g;
+		lg_v64 vg = *g;
+		g = &vg;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+		d = sd;
+		e = se;
+		f = sf;
+		g = sg;
+	}
+
+	void LGNode8I::hook() {
+		lg_v64 *sa = a;
+		lg_v64 va = *a;
+		a = &va;
+		lg_v64 *sb = b;
+		lg_v64 vb = *b;
+		b = &vb;
+		lg_v64 *sc = c;
+		lg_v64 vc = *c;
+		c = &vc;
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		lg_v64 *se = e;
+		lg_v64 ve = *e;
+		e = &ve;
+		lg_v64 *sf = f;
+		lg_v64 vf = *f;
+		f = &vf;
+		lg_v64 *sg = g;
+		lg_v64 vg = *g;
+		g = &vg;
+		lg_v64 *sh = h;
+		lg_v64 vh = *h;
+		h = &vh;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+		d = sd;
+		e = se;
+		f = sf;
+		g = sg;
+		h = sh;
+	}
+
+	void LGNodeArr::hook(){
+		o = **input_array;
+		std::vector<lg_v64*> si;
+		std::vector<lg_v64> vi;
+		for (int i=1;i<inputSize;i++){
+			si.push_back(input_array[i]);
+			vi.push_back(*input_array[i]);
+			input_array[i] = &vi[i];
+		}
+		hook_inputs();
+		sim();
+		hook_outputs();
+		for (int i=1;i<inputSize;i++){
+			input_array[i] = si[i];
+		}
+	}
+
 	bool LeveledGraph::sanity_check(){
 		bool c = true;
 		if (nodes.size() <= 0){
@@ -165,14 +408,12 @@ namespace ds_lg {
 		//propagates events from in level order from inputs to outputs
 		for (auto it=nodes.begin();it!=nodes.end();it++){
 			LGNode *n = *it;
-			n->propagate();
+			n->propagate(false);
 		}
 		//inject hooks
 		for (ds_faults::SimulationHook* h: hooks){
-			LGNode *node = h->hook(this);
-			if (node != 0){
-				push_node(node);
-			}
+			LGNode *node = h->get_hook_node();
+			push_node(node);
 		}
 		sim_intermediate();
 	}
@@ -180,7 +421,7 @@ namespace ds_lg {
 	void LeveledGraph::sim_intermediate(){
 		for (std::size_t i=0;i<num_levels;i++){
 			for (LGNode *n: simulation[i]){
-				if (n->propagate()){
+				if (n->propagate(true)){
 					for (LGNode *o : n->outputs){
 						push_node(o);
 					}
