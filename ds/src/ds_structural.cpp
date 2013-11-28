@@ -127,7 +127,7 @@ bool ds_structural::NetList::check_netlist(){
 
 		if (npi!=s->port_end()){
 			check = false;
-			std::cout << "Error: signal connected to null port " << s->get_instance_name() << std::endl;
+			BOOST_LOG_TRIVIAL(warning) << "Error: signal connected to null port " << s->get_instance_name();
 		}
 
 		port_map::iterator in_p = input_ports.find(s->get_instance_name());
@@ -144,28 +144,28 @@ bool ds_structural::NetList::check_netlist(){
 
 			if (pin==s->port_end() ){
 				check = false;
-				std::cout << "Error: no input port for " << s->get_instance_name() << std::endl;
+				BOOST_LOG_TRIVIAL(warning) << "No input port for " << s->get_instance_name() << std::endl;
 			}
 			if (pout==s->port_end()){
 				check = false;
-				std::cout << "Error: no output port for " << s->get_instance_name() << std::endl;
+				BOOST_LOG_TRIVIAL(warning) << "No output port for " << s->get_instance_name() << std::endl;
 			}
 		}
 		else {
 			if (in_p != input_ports.end() && out_p != output_ports.end()) {
 				check = false;
-				std::cout << "Error: signal connected to both input and output " << s->get_instance_name() << std::endl;
+				std::cout << "Error: signal connected to both input and output " << s->get_instance_name();
 			}
 			if (out_p==output_ports.end()){
 				if (pout!=s->port_end()){
 					check = false;
-					std::cout << "Error: netlist input port driven by internal port " << s->get_instance_name() << std::endl;
+					BOOST_LOG_TRIVIAL(warning) << "Netlist input port driven by internal port " << s->get_instance_name();
 				}
 			}
 			if (in_p==input_ports.end()){
 				if (pout==s->port_end()){
 					check = false;
-					std::cout << "Error: netlist output port not driven by internal port " << s->get_instance_name() << std::endl;
+					BOOST_LOG_TRIVIAL(warning) << "Netlist output port not driven by internal port " << s->get_instance_name();
 				}
 			}
 		}
@@ -187,7 +187,7 @@ bool ds_structural::NetList::check_netlist(){
 		}
 		if (drivers >= 2){
 			check = false;
-			std::cout << "Error: multiple signal drivers for " << s->get_instance_name() << std::endl;
+			BOOST_LOG_TRIVIAL(warning) << "Multiple signal drivers for " << s->get_instance_name();
 		}
 	}
 	for (auto it=signals.begin();it!=signals.end();it++){
@@ -198,7 +198,7 @@ bool ds_structural::NetList::check_netlist(){
 			if (owned == gates.end()){
 				if (g != this){
 					check = false;
-					std::cout << "Error: Foreign gate" << g->get_instance_name() << std::endl;
+					BOOST_LOG_TRIVIAL(warning) << "Foreign gate" << g->get_instance_name();
 				}
 			}
 		}
@@ -213,7 +213,7 @@ bool ds_structural::NetList::check_netlist(){
 			auto owned = signals.find(s->get_instance_name());
 			if (owned == signals.end()){
 				check = false;
-				std::cout << "Error: Foreign signal " << s->get_instance_name() << std::endl;
+				BOOST_LOG_TRIVIAL(warning) << "Foreign signal " << s->get_instance_name();
 			}
 		}
 		ds_structural::port_container::const_iterator out_it = g->get_outputs()->begin();
@@ -227,7 +227,7 @@ bool ds_structural::NetList::check_netlist(){
 			auto owned = signals.find(s->get_instance_name());
 			if (owned == signals.end()){
 				check = false;
-				std::cout << "Error: Foreign signal " << s->get_instance_name() << std::endl;
+				BOOST_LOG_TRIVIAL(warning) << "Foreign signal " << s->get_instance_name();
 			}
 		}
 	}
@@ -262,6 +262,8 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		return lg;
 
 	lg = new ds_lg::LeveledGraph();  	// return value
+	lg->nl = this;
+	lg->iteration = 0;
 	std::vector<Gate*> state_gates;
 	std::stack<Gate*> todo;
 
@@ -282,7 +284,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	{
 		ds_lg::Output *out = new ds_lg::Output();	// create output
 		out->set_gate(this);						// outputs ports belong to the enclosing netlist
-		out->set_name(pb->get_qualified_name());
+		out->set_name(pb->get_instance_name());
 		level_list.push_back(out);				// this node is traced back
 		lg->add_output(out);
 		Signal *s = pb->get_signal();
@@ -306,7 +308,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	{
 		ds_lg::Input *in = new ds_lg::Input();				// create input
 		in->set_gate(this);									// outputs ports belong to the enclosing netlist
-		in->set_name(pb->get_qualified_name());
+		in->set_name(pb->get_instance_name());
 		lg->add_input(in);
 		in->level = 0;										// inputs have depth 0
 		ds_lg::lg_v64 *driver = in->get_output("o");		//primitive outputs are 'o'
@@ -385,7 +387,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		if ((*oi)->level > max_level)
 			max_level = (*oi)->level;
 	}
-	lg->num_levels = max_level;
+	lg->num_levels = max_level + 1;
 
 	// build level map and fill level map with inputs and outputs
 	std::map<int, std::set<LGNode*>* > level_map;
@@ -415,7 +417,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		std::set<LGNode*>::iterator it = set->begin();
 		for (;it!=set->end();it++){
 			LGNode *n = *it;
-			lg->nodes.push_back(n);
+			lg->add_node(n);
 			n->set_leveled_graph(lg);
 		}
 		delete set;
@@ -428,10 +430,17 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 		lg->levels.push_back(it);
 	}
 
+	//set up intermediate simulation vectors
+	for  (int i=0;i<max_level+1;i++){
+		lg->simulation.push_back(new ds_lg::lg_node_container());
+	}
+
 	// count nodes per level
-	for (int i=0;i<max_level;i++){
+	for (int i=0;i<max_level+1;i++){
 		auto cIt = lg->levels[i];
-		auto nIt = lg->levels[i+1];
+		auto nIt = lg->nodes.end();
+		if (i<max_level)
+			nIt = lg->levels[i+1];
 		unsigned int level_size = 0;
 		while (cIt!=nIt){
 			level_size++;
@@ -440,6 +449,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 
 		lg->level_width.push_back(level_size);
 	}
+
 	level_map.clear();
 
 	//drive constant '0' assignments
@@ -469,7 +479,7 @@ ds_lg::LeveledGraph* ds_structural::NetList::build_leveled_graph(){
 	bool c = lg->sanity_check();
 
 	if (!c)
-		std::cout << "Sanity check failed" << std::endl;
+		BOOST_LOG_TRIVIAL(warning) << "Sanity check failed";
 
 
 	return lg;

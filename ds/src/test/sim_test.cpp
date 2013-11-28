@@ -11,11 +11,51 @@
 #include "ds_workspace.h"
 #include "ds_pattern.h"
 #include "ds_lg.h"
+#include "ds_faults.h"
+#include "ds_simulation.h"
+#include <boost/log/trivial.hpp>
 
-void sim_test::test_tricore_sim(){
-	lg_sim_test("p100k.v", "p100k.det.wgl", "top");
+void sim_test::test_sim(){
+	lg_sim_test("p100k.v", "p100k.wgl", "top");
 };
 
+void sim_test::test_fc(){
+	fc_test("p45k.v", "p45k.wgl", "top");
+};
+
+void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
+	ds_library::LibraryFactory *factory = ds_library::LibraryFactory::getInstance();
+	ds_library::Library *defaultLib = factory->load_library();
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	std::string path = d?d:"";
+	std::string pattern_file = path + "/files/" + wgl_file;
+	std::string design_file = path + "/files/" + design;
+	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, true);
+	ds_workspace::Workspace* wp = ds_workspace::Workspace::get_workspace();
+	wp->add_library(defaultLib);
+	ds_structural::NetList* nl = ds_library::import(design_file, top, wp);
+	nl->remove_floating_signals();
+	bool r = nl->remove_unused_gates();
+	while (r)
+		r = nl->remove_unused_gates();
+
+	ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
+	BOOST_LOG_TRIVIAL(debug) << "Calculating fault set...";
+	ds_faults::FaultList fl(nl);
+	int total_blocks = provider->num_blocks();
+	BOOST_LOG_TRIVIAL(debug) << "Beginning fault coverage calculation with " << total_blocks << " ...";
+
+	ds_simulation::run_combinational_fault_coverage(lg, &fl, provider);
+	double fc = fl.get_fc();
+	BOOST_LOG_TRIVIAL(info) << "Fault coverage: " << fc << std::endl;
+	std::set<ds_faults::SAFaultDescriptor*> detected;
+	fl.get_detected_faults(detected);
+	BOOST_LOG_TRIVIAL(info) << "Detected faults: " << detected.size() << std::endl;
+
+}
 
 void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_file, const std::string& top){
 	ds_library::LibraryFactory *factory = ds_library::LibraryFactory::getInstance();

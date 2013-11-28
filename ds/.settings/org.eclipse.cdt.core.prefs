@@ -5,8 +5,8 @@ environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865.50
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865.501081659/append=true
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865.501081659/appendContributed=true
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/DS/delimiter=\:
-environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/DS/operation=append
-environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/DS/value=/home/cookao/workspace/ds/ds
+environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/DS/operation=replace
+environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/DS/value=/Users/cookao/Documents/workspace/ds/ds
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/append=true
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376.411566865/appendContributed=true
 environment/project/cdt.managedbuild.config.gnu.exe.debug.777678376/DS/delimiter=\:

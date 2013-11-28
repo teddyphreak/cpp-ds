@@ -20,6 +20,9 @@ using namespace ds_pattern;
 void pattern_test::wgl_import_test(std::string& name) {
 
 	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
 	std::string path = d?d:"";
 	try {
 		std::string file = path + "/files/" + name;
@@ -51,11 +54,11 @@ void pattern_test::wgl_import_test(std::string& name) {
 				char expected = pattern[pIdx];
 				PatternValue pv = pl.get_port_values(i);
 				char val = '-';
-				if (pv.get(pIdx) == ds_simulation::BIT_0)
+				if (pv.get(pIdx) == ds_common::BIT_0)
 					val = '0';
-				else if (pv.get(pIdx) == ds_simulation::BIT_1)
+				else if (pv.get(pIdx) == ds_common::BIT_1)
 					val = '1';
-				else if (pv.get(pIdx) == ds_simulation::BIT_X)
+				else if (pv.get(pIdx) == ds_common::BIT_X)
 					val = 'X';
 				BOOST_CHECK(val == expected);
 			}
@@ -76,7 +79,7 @@ void pattern_test::wgl_import_test(std::string& name) {
 					int64 expected = pattern[pIdx] == '1' ? 1:0;
 					BOOST_CHECK(val == expected);
 					if (val != expected){
-						std::cout << std::hex << "VALUE MISMATCH: pattern: " << pIdx <<  " block: " << block << " offset " << offset << std::endl;
+						BOOST_LOG_TRIVIAL(error) << "VALUE MISMATCH: pattern: " << pIdx <<  " block: " << block << " offset " << offset;
 					}
 
 				} else {
@@ -84,7 +87,7 @@ void pattern_test::wgl_import_test(std::string& name) {
 					int64 xVal = (pb.values[pIdx].x >> offset) & 0x1;
 					BOOST_CHECK(xVal == 1);
 					if (xVal != 1){
-						std::cout << std::hex << "X MISMATCH: pattern: " << pIdx <<  " block: " << block << " offset: " << offset << std::endl;
+						BOOST_LOG_TRIVIAL(error) << "X MISMATCH: pattern: " << pIdx <<  " block: " << block << " offset: " << offset;
 					}
 				}
 
@@ -93,8 +96,10 @@ void pattern_test::wgl_import_test(std::string& name) {
 
 		}
 	}catch (boost::exception& e){
-		if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) )
-			 std::cerr << "Error: " << *mi;
+		if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) ){
+			BOOST_LOG_TRIVIAL(error) << *mi;
+			std::cerr << "Error: " << *mi;
+		}
 	}
 }
 

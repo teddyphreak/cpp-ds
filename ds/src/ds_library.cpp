@@ -22,6 +22,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
+#include <boost/log/trivial.hpp>
 
 ds_library::LibraryFactory* ds_library::LibraryFactory::instance = 0;
 
@@ -66,15 +67,15 @@ void ds_library::Library::load_nodes(){
 
 	node = new LGNode3I("and3", f_and3); types["and3"] = ds_library::AND;
 	list.push_back(node);
-	node = new LGNode3I("or3",f_or3); types["or"] = ds_library::OR;
+	node = new LGNode3I("or3",f_or3); types["or3"] = ds_library::OR;
 	list.push_back(node);
-	node = new LGNode3I("nand3",f_nand3); types["nand"] = ds_library::NAND;
+	node = new LGNode3I("nand3",f_nand3); types["nand3"] = ds_library::NAND;
 	list.push_back(node);
-	node = new LGNode3I("nor3",f_nor3); types["nor"] = ds_library::NOR;
+	node = new LGNode3I("nor3",f_nor3); types["nor3"] = ds_library::NOR;
 	list.push_back(node);
-	node = new LGNode3I("xor3",f_xor3);  types["xor"] = ds_library::XOR;
+	node = new LGNode3I("xor3",f_xor3);  types["xor3"] = ds_library::XOR;
 	list.push_back(node);
-	node = new LGNode3I("xnor3",f_xnor3);  types["xor"] = ds_library::XOR;
+	node = new LGNode3I("xnor3",f_xnor3);  types["xor3"] = ds_library::XOR;
 	list.push_back(node);
 
 	node = new LGNode4I("and4",f_and4); types["and4"] = ds_library::AND;
@@ -172,7 +173,7 @@ ds_library::Library* ds_library::LibraryFactory::load_library(const std::string&
 		}
 		catch (ds_common::parse_error &ex){
 			std::string const * msg  = boost::get_error_info<ds_common::errmsg_info>(ex);
-			std::cout << "Error:" << *msg << std::endl;
+			BOOST_LOG_TRIVIAL(error) << *msg;
 		}
 	}
 	return lib;
@@ -194,7 +195,7 @@ void ds_library::Library::load(const std::string &lib_name){
 
 					boost::algorithm::trim(line);
 					if (line[0]!='#') {
-						std::cout << "Error parsing library file: " << lib_name << ":" << line << std::endl;
+						BOOST_LOG_TRIVIAL(error) << "Error parsing library file: " << lib_name << ":" << line;
 						BOOST_THROW_EXCEPTION(ds_common::parse_error()
 						<< ds_common::errmsg_info("Error parsing library file: " + lib_name + ":" + line));
 					}
@@ -203,7 +204,7 @@ void ds_library::Library::load(const std::string &lib_name){
 			line_num++;
 		}
 	} else {
-		std::cout << "error loading library " << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "Error loading library file: " << lib_name << ". Device not open";
 		BOOST_THROW_EXCEPTION(ds_common::file_read_error() << boost::errinfo_errno(errno));
 	}
 }
@@ -236,6 +237,7 @@ bool ds_library::parse_verilog(const std::string& file, std::vector<parse_netlis
 		parse =  boost::spirit::qi::phrase_parse(begin, end, parser, spirit::ascii::space, netlists);
 
 	} else {
+		BOOST_LOG_TRIVIAL(error) << "Error parsing verilog file: " << file << ". Device not open";
 		BOOST_THROW_EXCEPTION(ds_common::file_read_error() << boost::errinfo_errno(errno));
 	}
 	return parse;
@@ -244,8 +246,8 @@ bool ds_library::parse_verilog(const std::string& file, std::vector<parse_netlis
 ds_structural::NetList* ds_library::import(const std::string& file, const std::string& toplevel, ds_workspace::Workspace *workspace){
 
 	if (file.find_last_of(".v") != file.size() - 1){
-		BOOST_THROW_EXCEPTION(ds_common::parse_error()
-		<< ds_common::errmsg_info("Only verilog design supported at the moment"));
+		BOOST_LOG_TRIVIAL(error) << "Only verilog files (.v) are supported at the moment... sorry" << file << ". Device not open";
+		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Only verilog design supported at the moment"));
 	}
 
 	ds_structural::NetList *netlist = 0;
@@ -254,15 +256,14 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 	bool parse = ds_library::parse_verilog(file, netlists);
 
 	if (!parse) {
-		BOOST_THROW_EXCEPTION(ds_common::parse_error()
-				<< ds_common::errmsg_info("Error parsing verilog file"));
+		BOOST_LOG_TRIVIAL(error) << "Error parsing verilog file. Enabling debug support in boost::qi might help";
+		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Error parsing verilog file"));
 	}
 
 	auto top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
 	if (top == netlists.end()){
-		std::vector<parse_netlist>::iterator it = netlists.begin();
-		BOOST_THROW_EXCEPTION(ds_common::parse_error()
-				<< ds_common::errmsg_info("Design " + toplevel + " not found"));
+		BOOST_LOG_TRIVIAL(error) << "Design " << toplevel << " not found";
+		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Design " + toplevel + " not found"));
 	}
 
 	//Start of dependency check
@@ -276,10 +277,6 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 		boost::apply_visitor(dependency_v, instance);
 	}
 	evaluated.insert(top_level);
-	for( dependency_type dp: dependency_v.dependencies )
-	{
-		std::cout << "dependencies "  << dp.first << dp.second << std::endl;
-	}
 
 	if (dependency_v.dependencies.size()==0){
 
@@ -303,7 +300,7 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 						[&] (const parse_netlist& n) { return (n.nl_name == dep.first) && (n.ports.size()==dep.second);});
 
 				if (parsed == netlists.end()){
-					std::cout << "Design " + toplevel + " not found" << std::endl;
+					BOOST_LOG_TRIVIAL(error) << "Design " + toplevel + " not found" << std::endl;
 					BOOST_THROW_EXCEPTION(ds_common::parse_error()	<< ds_common::errmsg_info("Design " + toplevel + " not found"));
 				}
 
@@ -393,7 +390,7 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 		ds_structural::Signal *s_lhs = netlist->find_signal(assignment.lhs);
 		ds_structural::Signal *s_rhs = netlist->find_signal(assignment.rhs);
 		if (s_lhs == 0 || s_rhs == 0){
-			std::cout << "Warning: assignment signals not found: " <<  assignment.lhs << " <= " << assignment.rhs << std::endl;
+			BOOST_LOG_TRIVIAL(warning)  << "Assignment signals not found: " <<  assignment.lhs << " <= " << assignment.rhs;
 		} else {
 			// instantiate a buffer and setup inputs and outputs
 			ds_structural::Gate *g = workspace->get_gate("buf", 2);
@@ -465,13 +462,13 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 				signal = new ds_structural::Signal(signal_name);
 				netlist->add_signal(signal);
 				if (signal_name == value_0){
-					signal->set_value(ds_simulation::BIT_0);
+					signal->set_value(ds_common::BIT_0);
 				}
 				else if (signal_name == value_1){
-					signal->set_value(ds_simulation::BIT_1);
+					signal->set_value(ds_common::BIT_1);
 				}
 				else if (signal_name == value_X){
-					signal->set_value(ds_simulation::BIT_X);
+					signal->set_value(ds_common::BIT_X);
 				}
 			}
 			//connect port signals to the the top level netlist
@@ -539,13 +536,13 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_explici
 			if (signal==0){
 				signal = new ds_structural::Signal(actual);
 				if (actual == value_0){
-					signal->set_value(ds_simulation::BIT_0);
+					signal->set_value(ds_common::BIT_0);
 				}
 				else if (actual == value_1){
-					signal->set_value(ds_simulation::BIT_1);
+					signal->set_value(ds_common::BIT_1);
 				}
 				else if (actual == value_X){
-					signal->set_value(ds_simulation::BIT_X);
+					signal->set_value(ds_common::BIT_X);
 				}
 
 				netlist->add_signal(signal);
@@ -554,8 +551,9 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_explici
 			pb->set_signal(signal);
 		}
 	} else {
+		BOOST_LOG_TRIVIAL(error) << "Gate"  << type << "not  found. Hierarchical explicit instances not supported yet... ";
 		BOOST_THROW_EXCEPTION(ds_common::parse_error()
-				<< ds_common::errmsg_info("No gate found" + type + ". Hierarchical explicit instances not supported yet... "));
+				<< ds_common::errmsg_info("Gate "  + type + " not  found. Hierarchical explicit instances not supported yet... "));
 	}
 }
 
@@ -569,6 +567,6 @@ void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_impli
 }
 
 void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_explicit_instance& instance) {
-
+	//TODO
 }
 

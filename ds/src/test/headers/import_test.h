@@ -22,7 +22,7 @@ namespace import_test {
 	{
 		import_ts(const std::string& name):boost::unit_test::test_suite(name)
 	    {
-			files_to_test.push_back( "cpu_ip_cmb07.v" );
+			//files_to_test.push_back( "cpu_ip_cmb07.v" );
 			//files_to_test.push_back( "cpu_ip.v" );
 	        files_to_test.push_back( "p45k.v" );
 	        files_to_test.push_back( "p100k.v" );

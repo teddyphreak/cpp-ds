@@ -19,7 +19,7 @@
 #include <boost/bind.hpp>
 #include <boost/checked_delete.hpp>
 #include "ds_common.h"
-#include "ds_simulation.h"
+#include "ds_common.h"
 
 namespace ds_lg {
 	class LGNode;
@@ -136,7 +136,7 @@ namespace ds_structural {
 	private:
 		std::string name; 			//!< signal name
 		sp_container ports; 		//!< port container
-		ds_simulation::Value val; 	//!< simulation value
+		ds_common::Value val; 	//!< simulation value
 	public:
 		/*!
 		 * returns the signal name
@@ -151,12 +151,12 @@ namespace ds_structural {
 		 * @param name signal name
 		 * @param val predefined simulation value
 		 */
-		Signal(const std::string& name, ds_simulation::Value val):name(name),val(val) {}
+		Signal(const std::string& name, ds_common::Value val):name(name),val(val) {}
 		/*!
 		 * signal constructor. Undefined simulation value
 		 * @param name signal name
 		 */
-		Signal(const std::string& name):Signal(name, ds_simulation::BIT_UD) {}
+		Signal(const std::string& name):Signal(name, ds_common::BIT_UD) {}
 		/*!
 		 * connects this signal to a port. It adds a port to the internal port container and sets the port's signal accordingly
 		 * @param pb pointer to the port to be connected
@@ -180,17 +180,17 @@ namespace ds_structural {
 		 */
 		int count_ports(){return ports.size();}
 		/*!
-		 * true if this signal has an initial value for simulation different from "undefined" @sa ds_simulation::Value
+		 * true if this signal has an initial value for simulation different from "undefined" @sa ds_common::Value
 		 */
-		bool is_fixed() const {return val != ds_simulation::BIT_UD;}
+		bool is_fixed() const {return val != ds_common::BIT_UD;}
 		/*!
 		 * returns the predefined value for this signal
 		 */
-		ds_simulation::Value get_fixed_value() const {return val;}
+		ds_common::Value get_fixed_value() const {return val;}
 		/*!
 		 * sets the predefined value for this signal
 		 */
-		void set_value(const ds_simulation::Value& v ) {val = v;}
+		void set_value(const ds_common::Value& v ) {val = v;}
 		/*!
 		 * disconnects all connected ports
 		 */

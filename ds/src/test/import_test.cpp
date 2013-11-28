@@ -20,6 +20,9 @@ void import_test::import_netlist(const std::string& name) {
 	LibraryFactory *factory = LibraryFactory::getInstance();
 	Library *defaultLib = factory->load_library();
 	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
 	std::string path = d?d:"";
 	Workspace *wp = ds_workspace::Workspace::get_workspace();
 	wp->add_library(defaultLib);
@@ -39,8 +42,11 @@ void import_test::import_netlist(const std::string& name) {
 		delete nl;
 
 	} catch (boost::exception& e){
-	 if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) )
-		 std::cerr << "Error: " << *mi;
+
+		if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) ){
+			BOOST_LOG_TRIVIAL(error) << *mi;
+			std::cerr << "Error: " << *mi;
+		}
 	}
 	BOOST_ASSERT(nl!=0);
 }

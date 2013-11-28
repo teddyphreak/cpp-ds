@@ -9,33 +9,36 @@
 #define DS_SIMULATION_H_
 
 #include<set>
-//#include "ds_lg.h"
+#include "ds_lg.h"
+#include "ds_faults.h"
+#include <boost/log/trivial.hpp>
 
 namespace ds_simulation {
 
-//using ds_lg::lg_v64;
-//using ds_lg::int64;
+class ErrorObserver : public ds_lg::Monitor {
+protected:
+	ds_lg::lg_v64 spec;
+	ds_common::int64 *ds;
+	ds_common::int64 *np;
+public:
+	ErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
+	virtual void observe(const ds_lg::lg_v64& v) {
+		ds_common::int64 detected = (~spec.x & ~v.x & spec.v & ~v.v) | (~spec.x & ~v.x & ~spec.v & v.v);
+		*ds |= detected;
 
-enum Value {
-	BIT_0 = 0,
-	BIT_1,
-	BIT_X,
-	BIT_UD
+		ds_common::int64 possibly_detected = ~spec.x & v.x;
+		*np |= (possibly_detected & ~detected);
+	}
+
+	void set_spec(const ds_lg::lg_v64& s){
+		spec.v = s.v;
+		spec.x = s.x;
+	}
+	virtual ~ErrorObserver(){}
 };
 
-//class ErrorObserver : public ds_lg::Monitor {
-//protected:
-//	lg_v64 spec;
-//	bool *error;
-//public:
-//	ErrorObserver(bool *e):error(e){}
-//	virtual void observe(const lg_v64& v) {
-//		int64 = (~spec.x & ~v.x & ~spev.v & ~v.v) | (~spec.x & ~v.x & spev.v & v.v);
-//	}
-//	void set_spec(const lg_v64& s){
-//		spec = s;
-//	}
-//};
+void run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::FaultList* fl, ds_pattern::CombinationalPatternProvider* provider);
+
 }
 
 

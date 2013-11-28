@@ -11,7 +11,6 @@
 //#define BOOST_SPIRIT_DEBUG
 
 #include "ds_common.h"
-#include "ds_simulation.h"
 #include "stdio.h"
 #include <fstream>
 #include <map>
@@ -22,6 +21,7 @@
 #include <boost/spirit/include/phoenix_operator.hpp>
 #include <boost/spirit/include/phoenix_stl.hpp>
 #include <boost/spirit/include/phoenix_fusion.hpp>
+#include <boost/spirit/include/qi_no_skip.hpp>
 #include <boost/config/warning_disable.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/config/warning_disable.hpp>
@@ -134,6 +134,7 @@ namespace ds_pattern {
 
 			using qi::int_;
 			using qi::char_;
+			using qi::blank;
 			using qi::lit;
 			using boost::phoenix::at_c;
 			using boost::spirit::_val;
@@ -142,6 +143,7 @@ namespace ds_pattern {
 			using qi::_1;
 			using boost::spirit::omit;
 			using phoenix::push_back;
+			using boost::spirit::no_skip;
 			start =
 					+comment
 					>> waveform  [at_c<1>(_val)=_1]
@@ -152,7 +154,7 @@ namespace ds_pattern {
 
 			name = char_("a-zA-Z_") >> *char_("a-zA-Z_0-9");
 			magnitud = +char_("0-9") >> +char_("a-zA-Z");
-			comment = lit("{") >> +(char_ - '}') >> lit("}");
+			comment = (lit("{") >> +(char_ - '}') >> lit("}")) | (lit("#") >> no_skip[*(char_ - '\n')]);
 			waveform =
 						lit("waveform") >> name >> lit("signal")
 						>> +( input [push_back(at_c<0>(_val), _1)] | output [push_back(at_c<1>(_val), _1)] )
@@ -166,7 +168,7 @@ namespace ds_pattern {
 					>> -(lit("[") >> int_ [at_c<2>(_val)=_1] >> lit("..") >> int_ [at_c<3>(_val)=_1] >> lit("]")) [at_c<0>(_val)=true]
 					>> lit(":") >> lit("output") >> omit [ -(name >> lit("[") >> name >> lit("]")) ]>> lit(";");
 			timeplate =
-					lit("timeplate") >> name >> name >> magnitud
+					lit("timeplate") >> -lit("\"") >> name >> -lit("\"") >> name >> magnitud
 					>> +( input_timeplate [push_back(at_c<0>(_val), _1)] | output_timeplate [push_back(at_c<1>(_val), _1)] )
 					>> lit("end");
 			input_timeplate =
@@ -174,7 +176,7 @@ namespace ds_pattern {
 					lit("input") >> lit("[") >> (magnitud >> lit(":") >> name) % ',' >> lit("]") >> lit(";");
 			output_timeplate =
 					lit("\"") >> name >> lit("\"") >> -(char_("[") >> +char_("0-9") >>  char_("]")) >> lit(":=") >>
-					lit("output") >> lit("[") >> (magnitud >> lit(":") >> name) % ','>> lit("]") >> lit(";");
+					lit("output") >> lit("[") >> (magnitud >> lit(":") >> -(name >> lit("'")) >> name) % ','>> lit("]") >> lit(";");
 			port_name = lit("\"") >> name >> lit("\"") >> -(char_('[') >> +char_("0-9") >> char_("]") );
 			order  =
 					lit("pattern") >> omit[name] >> lit("(")
@@ -232,28 +234,34 @@ namespace ds_pattern {
 		 * @param pos offset position in the pattern
 		 * @param val value to write in the specified position
 		 */
-		void set(std::size_t pos, ds_simulation::Value val) {
-			if (val == ds_simulation::BIT_X){
+		void set(std::size_t pos, ds_common::Value val) {
+			if (val == ds_common::BIT_X){
 				x[pos] = true;
 				v[pos] = false;
 			} else {
 				x[pos] = false;
-				v[pos] = val == ds_simulation::BIT_1;
+				v[pos] = val == ds_common::BIT_1;
 			}
 		}
 
 		/*!
 		 * returns the pattern value in a specified ofset position
 		 */
-		ds_simulation::Value get(int pos) const {
+		ds_common::Value get(int pos) const {
 			if(x[pos]==1){
-				return ds_simulation::BIT_X;
+				return ds_common::BIT_X;
 			}
 			if (v[pos] == 1)
-				return ds_simulation::BIT_1;
+				return ds_common::BIT_1;
 			if (v[pos] == 0)
-				return ds_simulation::BIT_0;
-			return ds_simulation::BIT_X;
+				return ds_common::BIT_0;
+			return ds_common::BIT_X;
+		}
+
+		bool is_compatible(const PatternValue& pv);
+		std::size_t get_specified_bits(){
+			boost::dynamic_bitset<> t_x(~x);
+			return t_x.count();
 		}
 
 	private:
@@ -283,9 +291,9 @@ namespace ds_pattern {
 		/*!
 		 * Creates a pattern list from an intermediate wgl representation.
 		 * @param sc wgl representation of test patterns
-		 * @param discard_x true if any pattern containing 'X' values is discarded
+		 * @param compact true if compatible patterns are discarded
 		 */
-		PatternList(const scan_data& sc, bool discard_x = true);
+		PatternList(const scan_data& sc, bool compact = true);
 		/*
 		 * several convenience methods
 		 */
@@ -309,12 +317,18 @@ namespace ds_pattern {
 	 */
 	struct SimPatternBlock {
 		int num_patterns;		//!< number of patterns in the block (<64)
+		ds_common::int64 mask;
 		PatternBlock values;	//!< sequence of pattern values
-		SimPatternBlock(){}
+		SimPatternBlock(const int& n):mask(0){
+			num_patterns = n;
+			for (int i=0;i<num_patterns;i++){
+				mask |= 1L << i;
+			}
+		}
 		/*!
 		 * provided pattern values are copied
 		 */
-		SimPatternBlock(const SimPatternBlock& spb):num_patterns(spb.num_patterns){
+		SimPatternBlock(const SimPatternBlock& spb):num_patterns(spb.num_patterns),mask(spb.mask){
 			values.insert(values.begin(), spb.values.begin(), spb.values.end());
 		}
 	};
@@ -368,9 +382,9 @@ namespace ds_pattern {
 		CombinationalPatternProvider(const PatternList& pl);
 		/*!
 		 * Creates a combinational pattern provider out of parsed pattern data
-		 * @param discard_x true if any pattern containing 'X' values is discarded
+		 * @param compact true if compactible patterns are discarded
 		 */
-		CombinationalPatternProvider(const scan_data& sc, bool discard_x=true);
+		CombinationalPatternProvider(const scan_data& sc, bool compact=true);
 
 		/*
 		 * convenience functions
@@ -419,18 +433,18 @@ namespace ds_pattern {
 	/*!
 	 * loads an intermediate representation of the pattern set
 	 * @param file path to the wgl file
-	 * @param discard_x true if any pattern containing 'X' values is discarded
+	 * @param discard_x true if compatible patterns are discarded
 	 *
 	 */
-	ds_pattern::PatternList* parse_wgl(const std::string& file, bool discard_x=true);
+	ds_pattern::PatternList* parse_wgl(const std::string& file, bool compact=true);
 
 	/*!
 	 * loads a combinational pattern provider ready for simulation
 	 * @param file path to the wgl file
-	 * @param discard_x true if any pattern containing 'X' values is discarded
+	 * @param discard_x true if compatoble patterns are discarded
 	 *
 	 */
-	ds_pattern::CombinationalPatternProvider* load_pattern_blocks(const std::string& file, bool discard_x=true);
+	ds_pattern::CombinationalPatternProvider* load_pattern_blocks(const std::string& file, bool compact=true);
 
 }
 

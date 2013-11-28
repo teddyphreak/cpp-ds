@@ -8,34 +8,39 @@
 #include "ds_library.h"
 #include "ds_workspace.h"
 #include "ds_structural.h"
-#include "ds_simulation.h"
+#include "ds_common.h"
+#include <boost/log/trivial.hpp>
 
 using ds_faults::SAFaultDescriptor;
 
-void ds_faults::get_fault_classes(ds_structural::Gate* g, std::vector<std::list<SAFaultDescriptor> >& fault_classes){
+void ds_faults::get_fault_classes(ds_structural::Gate* g, std::vector<std::list<SAFaultDescriptor*>* >& fault_classes){
 	ds_workspace::Workspace *workspace = ds_workspace::Workspace::get_workspace();
 	std::string gate_type = g->get_type();
+	//query logic function from workspace
 	ds_library::LogicFunction f = workspace->get_function(gate_type);
+	//generated equivalent faults according to the gate's controlling and inverting values
 	switch(f){
 	case ds_library::BUF:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_0, ds_simulation::BIT_0, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_0, ds_common::BIT_0, fault_classes);
 		break;
 	case ds_library::NOT:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_0, ds_simulation::BIT_1, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_0, ds_common::BIT_1, fault_classes);
 		break;
 	case ds_library::AND:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_0, ds_simulation::BIT_0, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_0, ds_common::BIT_0, fault_classes);
 		break;
 	case ds_library::OR:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_1, ds_simulation::BIT_0, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_1, ds_common::BIT_0, fault_classes);
 		break;
 	case ds_library::NAND:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_0, ds_simulation::BIT_1, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_0, ds_common::BIT_1, fault_classes);
 		break;
 	case ds_library::NOR:
-		ds_faults::get_gate_faults(g, ds_simulation::BIT_0, ds_simulation::BIT_0, fault_classes);
+		ds_faults::get_gate_faults(g, ds_common::BIT_1, ds_common::BIT_1, fault_classes);
 		break;
 	default:
+		//generate all outputs faults if gate type is not found
+		BOOST_LOG_TRIVIAL(trace) << "Generating all port faults for gate: " << gate_type;
 		const ds_structural::port_container *inputs = g->get_inputs();
 		const ds_structural::port_container *outputs = g->get_outputs();
 		ds_faults::get_port_faults(inputs->begin(), inputs->end(), fault_classes);
@@ -44,15 +49,15 @@ void ds_faults::get_fault_classes(ds_structural::Gate* g, std::vector<std::list<
 	}
 }
 
-void ds_faults::get_gate_faults(ds_structural::Gate* g, ds_simulation::Value c, ds_simulation::Value i, std::vector<std::list<SAFaultDescriptor> >& fault_classes){
+void ds_faults::get_gate_faults(ds_structural::Gate* g, ds_common::Value c, ds_common::Value i, std::vector<std::list<SAFaultDescriptor*>* >& fault_classes){
 
 	using ds_structural::PortBit;
 	// inverted controlling value
-	ds_simulation::Value nc = (c == ds_simulation::BIT_0) ? ds_simulation::BIT_1: ds_simulation::BIT_0;
+	ds_common::Value nc = (c == ds_common::BIT_0) ? ds_common::BIT_1: ds_common::BIT_0;
 	//controlling value xor inverting value
-	ds_simulation::Value ci = (c == i) ? ds_simulation::BIT_0 : ds_simulation::BIT_1;
+	ds_common::Value ci = (c == i) ? ds_common::BIT_0 : ds_common::BIT_1;
 	//controlling value xnor inverting value
-	ds_simulation::Value nci = (c != i) ? ds_simulation::BIT_0 : ds_simulation::BIT_1;
+	ds_common::Value nci = (c != i) ? ds_common::BIT_0 : ds_common::BIT_1;
 
 	//get gate's output port
 	PortBit *output_port = *(g->get_outputs()->begin());
@@ -66,209 +71,292 @@ void ds_faults::get_gate_faults(ds_structural::Gate* g, ds_simulation::Value c, 
 		PortBit *input_port = *(g->get_inputs()->begin());
 
 		//first equivalent class
-		std::list<SAFaultDescriptor> f1_class;
-		SAFaultDescriptor fic(g->get_instance_name(), output_port->get_instance_name(), c);
-		SAFaultDescriptor foci(g->get_instance_name(), input_port->get_instance_name(), ci);
-		f1_class.push_back(fic);
-		f1_class.push_back(foci);
+		std::list<SAFaultDescriptor*> *f1_class = new std::list<SAFaultDescriptor*>();
+		SAFaultDescriptor *fic = new SAFaultDescriptor(g->get_instance_name(), output_port->get_instance_name(), c);
+		SAFaultDescriptor *foci = new SAFaultDescriptor(g->get_instance_name(), input_port->get_instance_name(), ci);
+		f1_class->push_back(fic);
+		f1_class->push_back(foci);
 		fault_classes.push_back(f1_class);
 
 		//second equivalent class
-		std::list<SAFaultDescriptor> f2_class;
-		SAFaultDescriptor finc(g->get_instance_name(), output_port->get_instance_name(), nc);
-		SAFaultDescriptor fonci(g->get_instance_name(), input_port->get_instance_name(), nci);
-		f2_class.push_back(finc);
-		f2_class.push_back(fonci);
+		std::list<SAFaultDescriptor*> *f2_class = new std::list<SAFaultDescriptor*>();
+		SAFaultDescriptor *finc = new SAFaultDescriptor(g->get_instance_name(), output_port->get_instance_name(), nc);
+		SAFaultDescriptor *fonci = new SAFaultDescriptor(g->get_instance_name(), input_port->get_instance_name(), nci);
+		f2_class->push_back(finc);
+		f2_class->push_back(fonci);
 		fault_classes.push_back(f2_class);
 
 	} else {
 		// generate one stuck-at-not-c at each input
 		for (auto it = ports->begin();it!=ports->end();it++){
 			PortBit *pb = *it;
-			SAFaultDescriptor f(g->get_instance_name(), pb->get_instance_name(), nc);
-			std::list<SAFaultDescriptor> f_class;
-			f_class.push_back(f);
+			SAFaultDescriptor *f = new SAFaultDescriptor(g->get_instance_name(), pb->get_instance_name(), nc);
+			std::list<SAFaultDescriptor*> *f_class = new std::list<SAFaultDescriptor*>();
+			f_class->push_back(f);
 			fault_classes.push_back(f_class);
 		}
 		// generate one stuck-at-c-xnor-i at output
-		SAFaultDescriptor f(g->get_instance_name(), output_port->get_instance_name(), nci);
-		std::list<SAFaultDescriptor> f_class;
-		f_class.push_back(f);
+		SAFaultDescriptor *f = new SAFaultDescriptor(g->get_instance_name(), output_port->get_instance_name(), nci);
+		std::list<SAFaultDescriptor*> *f_class = new std::list<SAFaultDescriptor*>();
+		f_class->push_back(f);
 		fault_classes.push_back(f_class);
 
 		//generate equivalence class
 		//generate one stuck-at-c-xor-i at output
-		SAFaultDescriptor fo(g->get_instance_name(), output_port->get_instance_name(), ci);
-		std::list<SAFaultDescriptor> equivalent;
-		equivalent.push_back(fo);
+		SAFaultDescriptor *fo = new SAFaultDescriptor(g->get_instance_name(), output_port->get_instance_name(), ci);
+		std::list<SAFaultDescriptor*> *equivalent = new std::list<SAFaultDescriptor*>();;
+		equivalent->push_back(fo);
 		for (auto it = ports->begin();it!=ports->end();it++){
 			PortBit *pb = *it;
 			//generate one stuck-at-c at each input port
-			SAFaultDescriptor f(g->get_instance_name(), pb->get_instance_name(), c);
-			equivalent.push_back(f);
+			SAFaultDescriptor *f = new SAFaultDescriptor(g->get_instance_name(), pb->get_instance_name(), c);
+			equivalent->push_back(f);
 		}
 		fault_classes.push_back(equivalent);
 	}
 }
 
-void ds_faults::get_port_faults(ds_structural::port_container::const_iterator begin, ds_structural::port_container::const_iterator end, std::vector<std::list<SAFaultDescriptor> >& fault_classes){
+void ds_faults::get_port_faults(ds_structural::port_container::const_iterator begin, ds_structural::port_container::const_iterator end, std::vector<std::list<SAFaultDescriptor*>* >& fault_classes){
 	// no equivalent faults
 	for (auto it = begin;it!=end;it++){
 		ds_structural::PortBit *pb = *it;
 
 		// generate stuck-at-0 at each port
-		SAFaultDescriptor f0(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_simulation::BIT_0);
-		std::list<SAFaultDescriptor> f0_class;
-		f0_class.push_back(f0);
+		SAFaultDescriptor *f0 = new SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_common::BIT_0);
+		std::list<SAFaultDescriptor*> *f0_class = new std::list<SAFaultDescriptor*>();
+		f0_class->push_back(f0);
 		fault_classes.push_back(f0_class);
 
 		// generate stuck-at-1 at each port
-		SAFaultDescriptor f1(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_simulation::BIT_1);
-		std::list<SAFaultDescriptor> f1_class;
-		f1_class.push_back(f1);
+		SAFaultDescriptor *f1 = new SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_common::BIT_1);
+		std::list<SAFaultDescriptor*> *f1_class = new std::list<SAFaultDescriptor*>();
+		f1_class->push_back(f1);
 		fault_classes.push_back(f1_class);
 	}
 }
 
-void ds_faults::get_fault_classes(ds_structural::NetList* nl, std::map<SAFaultDescriptor, std::list<SAFaultDescriptor> >& representatives){
+std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* ds_faults::get_fault_universe(ds_structural::NetList* nl){
+	//fault classes
+	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* > *universe = new std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >();
+	//all gates in the netlist
 	std::vector<ds_structural::Gate*> gates;
 	nl->get_gates(gates);
-	std::cout << "#gates " << gates.size() << std::endl;
-	std::vector<std::list<SAFaultDescriptor> > fault_classes;
-	std::map<SAFaultDescriptor, SAFaultDescriptor> descriptor_map;
+
+	std::vector<std::list<SAFaultDescriptor*>* > fault_classes;
+	std::map<SAFaultDescriptor*, SAFaultDescriptor*> descriptor_map;
+	//calculate fault classes for each netlist gate
 	for (ds_structural::Gate* g:gates){
 		ds_faults::get_fault_classes(g, fault_classes);
 	}
+
+	//calculate all faults for inputs and outputs
 	std::vector<const ds_structural::PortBit*> ports;
 	const ds_structural::port_container* inputs = nl->get_inputs();
 	const ds_structural::port_container* outputs = nl->get_outputs();
 	ports.insert(ports.begin(), inputs->begin(), inputs->end());
 	ports.insert(ports.begin(), outputs->begin(), outputs->end());
 	for (const ds_structural::PortBit *pb: ports){
-		SAFaultDescriptor sa0 = SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_simulation::BIT_0);
-		std::list<SAFaultDescriptor> list0;
-		list0.push_back(sa0);
-		SAFaultDescriptor sa1 = SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_simulation::BIT_1);
-		std::list<SAFaultDescriptor> list1;
-		list1.push_back(sa1);
+		SAFaultDescriptor *sa0 = new SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_common::BIT_0);
+		std::list<SAFaultDescriptor*> *list0 = new std::list<SAFaultDescriptor*>();
+		list0->push_back(sa0);
+		SAFaultDescriptor *sa1 = new SAFaultDescriptor(pb->get_gate()->get_instance_name(), pb->get_instance_name(), ds_common::BIT_1);
+		std::list<SAFaultDescriptor*> *list1= new std::list<SAFaultDescriptor*>();
+		list1->push_back(sa1);
 		fault_classes.push_back(list0);
 		fault_classes.push_back(list1);
 	}
+
+	// map fault name to descriptor and select representative
+	std::map<std::string, SAFaultDescriptor*> fault_registry;
 	for (auto it=fault_classes.begin();it!=fault_classes.end();it++){
-		std::list<SAFaultDescriptor> f_class = *it;
-		SAFaultDescriptor rep = *f_class.begin();
-		representatives[rep] = f_class;
-		for (SAFaultDescriptor d:f_class){
+		std::list<SAFaultDescriptor*>* f_class = *it;
+		SAFaultDescriptor *rep = *f_class->begin();
+		(*universe)[rep] = f_class;
+		for (auto it=f_class->begin();it!=f_class->end();it++){
+			SAFaultDescriptor *d = *it;
 			descriptor_map[d] = rep;
+			fault_registry[d->get_string()] = d;
 		}
 	}
-	std::cout << "# rep faults " << representatives.size() << std::endl;
-	std::vector<SAFaultDescriptor> remove;
+
+	//evaluate all signals
 	std::vector<ds_structural::Signal*> signals;
 	nl->get_signals(signals);
 	for (ds_structural::Signal* s:signals){
 		if (s->count_ports() == 2){
+
+			//calculate equivalent faults if only two ports are connected (no fan-out nodes)
+
 			auto it =  s->port_begin();
 			ds_structural::PortBit *first = *it;
 			ds_structural::PortBit *second = *(++it);
 
-			SAFaultDescriptor aggressor1 = SAFaultDescriptor(first->get_gate()->get_instance_name(), first->get_instance_name(), ds_simulation::BIT_1);
-			SAFaultDescriptor aggressor0 = SAFaultDescriptor(first->get_gate()->get_instance_name(), first->get_instance_name(), ds_simulation::BIT_0);
-			SAFaultDescriptor victim1 = SAFaultDescriptor(second->get_gate()->get_instance_name(), second->get_instance_name(), ds_simulation::BIT_1);
-			SAFaultDescriptor victim0 = SAFaultDescriptor(second->get_gate()->get_instance_name(), second->get_instance_name(), ds_simulation::BIT_0);
+			// the aggressor is kept and the victim is removed
+			SAFaultDescriptor d_aggressor1 = SAFaultDescriptor(first->get_gate()->get_instance_name(), first->get_instance_name(), ds_common::BIT_1);
+			SAFaultDescriptor d_aggressor0 = SAFaultDescriptor(first->get_gate()->get_instance_name(), first->get_instance_name(), ds_common::BIT_0);
+			SAFaultDescriptor d_victim1 = SAFaultDescriptor(second->get_gate()->get_instance_name(), second->get_instance_name(), ds_common::BIT_1);
+			SAFaultDescriptor d_victim0 = SAFaultDescriptor(second->get_gate()->get_instance_name(), second->get_instance_name(), ds_common::BIT_0);
 
-			std::map<SAFaultDescriptor, SAFaultDescriptor>::iterator f;
+			// pointer to created descriptor is not available. Search for it in the registry
+			SAFaultDescriptor* aggressor1 = fault_registry[d_aggressor1.get_string()];
+			SAFaultDescriptor* aggressor0 = fault_registry[d_aggressor0.get_string()];
+			SAFaultDescriptor* victim1 = fault_registry[d_victim1.get_string()];
+			SAFaultDescriptor* victim0 = fault_registry[d_victim0.get_string()];
 
-			f=descriptor_map.find(aggressor1);
-			if (f==descriptor_map.end()){
-				std::cout << "aggressor 1 not found: " << aggressor1.gate_name << " " << aggressor1.port_name << std::endl;
-			}
-			f=descriptor_map.find(aggressor0);
-			if (f==descriptor_map.end()){
-				std::cout << "aggressor 0 not found: " << aggressor0.gate_name << " " << aggressor0.port_name << std::endl;
-			}
-			f=descriptor_map.find(victim1);
-			if (f==descriptor_map.end()){
-				std::cout << "victim 1 not found " << std::endl;
-			}
-			f=descriptor_map.find(victim0);
-			if (f==descriptor_map.end()){
-				std::cout << "victim 0 not found " << std::endl;
-			}
-			SAFaultDescriptor rep_aggressor1 = descriptor_map[aggressor1];
-			SAFaultDescriptor rep_aggressor0 = descriptor_map[aggressor0];
-			SAFaultDescriptor rep_victim1 = descriptor_map[victim1];
-			SAFaultDescriptor rep_victim0 = descriptor_map[victim0];
+			// find representatives
+			SAFaultDescriptor* rep_aggressor1 = descriptor_map[aggressor1];
+			SAFaultDescriptor* rep_aggressor0 = descriptor_map[aggressor0];
+			SAFaultDescriptor* rep_victim1 = descriptor_map[victim1];
+			SAFaultDescriptor* rep_victim0 = descriptor_map[victim0];
 
-			std::map<SAFaultDescriptor, std::list<SAFaultDescriptor> >::iterator g;
-			g=representatives.find(rep_aggressor1);
-			if (g==representatives.end()){
-				std::cout << "rep aggressor 1 not found: " << aggressor1.gate_name << " " << aggressor1.port_name << std::endl;
-			}
-			g=representatives.find(rep_aggressor0);
-			if (g==representatives.end()){
-				std::cout << "rep aggressor 0 not found: " << aggressor0.gate_name << " " << aggressor0.port_name << std::endl;
-			}
-			g=representatives.find(rep_victim1);
-			if (g==representatives.end()){
-				std::cout << "rep victim 1 not found: " << rep_victim1.gate_name << " " << rep_victim1.port_name << std::endl;
-			}
-			g=representatives.find(rep_victim0);
-			if (g==representatives.end()){
-				std::cout << "rep victim 0 not found: " << rep_victim0.gate_name << " " << rep_victim0.port_name << std::endl;
+			// merge equivalent fault in the two classes (that of the aggressor and victim)
+			std::list<SAFaultDescriptor*> *equivalent1 = (*universe)[rep_aggressor1];
+			std::list<SAFaultDescriptor*> *equivalent0 = (*universe)[rep_aggressor0];
+			std::list<SAFaultDescriptor*> *merge1 = (*universe)[rep_victim1];
+			std::list<SAFaultDescriptor*> *merge0 = (*universe)[rep_victim0];
+
+			equivalent0->insert(equivalent0->begin(), merge0->begin(), merge0->end());
+			equivalent1->insert(equivalent1->begin(), merge1->begin(), merge1->end());
+
+			//update representative map
+			for (auto it=merge1->begin();it!=merge1->end();it++){
+				descriptor_map[*it] = rep_aggressor1;
 			}
 
-			std::list<SAFaultDescriptor> equivalent1 = representatives[rep_aggressor1];
-			std::list<SAFaultDescriptor> equivalent0 = representatives[rep_aggressor0];
-			std::list<SAFaultDescriptor> merge1 = representatives[rep_victim1];
-			std::list<SAFaultDescriptor> merge0 = representatives[rep_victim0];
-
-			equivalent0.insert(equivalent0.begin(), merge0.begin(), merge0.end());
-			equivalent1.insert(equivalent1.begin(), merge1.begin(), merge1.end());
-
-			representatives[rep_aggressor0] = equivalent0;
-			representatives[rep_aggressor1] = equivalent1;
-
-			for (SAFaultDescriptor eq:merge1){
-				descriptor_map[eq] = rep_aggressor1;
+			for (auto it=merge0->begin();it!=merge0->end();it++){
+				descriptor_map[*it] = rep_aggressor0;
 			}
 
-			for (SAFaultDescriptor eq:merge0){
-				descriptor_map[eq] = rep_aggressor0;
-			}
-
-			representatives.erase(rep_victim0);
-			representatives.erase(rep_victim1);
-
-			remove.push_back(rep_victim0);
-			remove.push_back(rep_victim1);
+			//delete unused containers
+			delete (merge0);
+			delete (merge1);
+			universe->erase(rep_victim0);
+			universe->erase(rep_victim1);
 		}
 	}
-	std::cout << "removed: " << remove.size() << " size " << representatives.size() << std::endl;
-
+	return universe;
 }
 
 ds_lg::lg_v64* ds_faults::resolve(const PinReference *pr, ds_lg::LeveledGraph *lg){
 	std::string name = pr->get_gate_name();
 	std::string port = pr->get_port_name();
 	ds_lg::LGNode *n = lg->get_node(name);
+	// try a gate first
 	if (n!=0){
+		ds_structural::NetList *nl = lg->get_netlist();
+		ds_structural::Gate *g = nl->find_gate(name);
+		std::string hook_port = g->get_mapping(port);
 		if (pr->is_input()){
-			ds_lg::lg_v64 *p = *n->get_input(name);
+			ds_lg::lg_v64 *p = *n->get_input(hook_port);
 			return p;
 		}
 		if (pr->is_output()){
-			ds_lg::lg_v64 *p = n->get_output(port);
+			ds_lg::lg_v64 *p = n->get_output(hook_port);
 			return p;
 		}
 	} else {
+		// no gate found. Try a primiry input / output
 		n = lg->get_node(port);
 		if (pr->is_input()){
-			return *n->get_input("o");
+			return n->get_output("o");		// only one port possible
 		}
 		if (pr->is_output()){
-			return n->get_output("a");
+			return *n->get_input("a");		// only one port possible
 		}
 	}
 	return 0;
+}
+
+std::set<SAFaultDescriptor*>* ds_faults::get_collapsed_faults(ds_structural::NetList* nl){
+	std::set<SAFaultDescriptor*>* collapsed = new std::set<SAFaultDescriptor*>();
+	//get all fault classes
+	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* universe = ds_faults::get_fault_universe(nl);
+	for (auto it=universe->begin();it!=universe->end();it++){
+		// make a copy
+		SAFaultDescriptor* copy = new SAFaultDescriptor(*it->first);
+		collapsed->insert(copy);
+	}
+	// delete fault classes
+	ds_faults::delete_faults(universe);
+	return collapsed;
+}
+
+void ds_faults::delete_faults(std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* faults){
+	for (auto it=faults->begin();it!=faults->end();it++){
+		SAFaultDescriptor* eq_ptr = it->first;
+		SAFaultDescriptor eq = *eq_ptr;
+		std::list<SAFaultDescriptor*> *faults = it->second;
+		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
+			SAFaultDescriptor* f = *f_it;
+			delete(f);
+		}
+		delete(faults);
+	}
+}
+
+ds_faults::FaultList::FaultList(ds_structural::NetList* nl){
+	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* universe = ds_faults::get_fault_universe(nl);
+	for (auto it=universe->begin();it!=universe->end();it++){
+		SAFaultDescriptor* f = new SAFaultDescriptor(*it->first);
+		uk.insert(f);
+		fault_map[f] = UK;
+		std::list<SAFaultDescriptor*> *faults = it->second;
+		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
+			SAFaultDescriptor* eq = *f_it;
+			representatives[eq->get_string()] = f;
+		}
+	}
+	ds_faults::delete_faults(universe);
+}
+
+void ds_faults::FaultList::reset_fault_categories(){
+	uk.clear();
+	uk.insert(ds.begin(), ds.end());
+	uk.insert(ud.begin(), ud.end());
+	fault_map.clear();
+	for (SAFaultDescriptor *f:uk){
+		fault_map[f] = ds_faults::UK;
+	}
+}
+void ds_faults::FaultList::set_fault_category(SAFaultDescriptor *f, const FaultCategory& category){
+	FaultCategory current_class = fault_map[f];
+	std::set<SAFaultDescriptor*>* current_container = find_container(current_class);
+	std::set<SAFaultDescriptor*>* new_container = find_container(category);
+	if (new_container!=0){
+		current_container->erase(f);
+		new_container->insert(f);
+		fault_map[f] = category;
+	}
+}
+std::set<SAFaultDescriptor*>* ds_faults::FaultList::find_container(const FaultCategory& category){
+	switch(category){
+	case ds_faults::UK:
+		return &uk;
+	case ds_faults::DS:
+		return &ds;
+	case ds_faults::UD:
+		return &ud;
+	case ds_faults::NP:
+		return &np;
+	default:
+		return 0;
+	}
+}
+ds_faults::FaultList::~FaultList(){
+	reset_fault_categories();
+	for (SAFaultDescriptor *f:uk){
+		delete f;
+	}
+	uk.clear();
+}
+void ds_faults::FaultList::set_fault_category(std::string n, std::string p, const ds_common::Value& v, const ds_faults::FaultCategory& category){
+	SAFaultDescriptor d(n,p,v);
+	SAFaultDescriptor* f = representatives[d.get_string()];
+	set_fault_category(f, category);
+}
+double ds_faults::FaultList::get_fc() const {
+	int total_faults = fault_map.size();
+	double detected = ds.size() + X_WEIGHT * np.size();
+	double fc = detected / total_faults * 100;
+	return fc;
 }

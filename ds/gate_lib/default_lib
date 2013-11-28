@@ -3,7 +3,7 @@ buf,buf,1,o1@o,1,i1@a
 buf1,buf,1,o1@o,1,i1@a
 
 not,not,1,o1@o,1,i1@a
-not1,not1,1,o1@o,1,i1@a
+not1,not,1,o1@o,1,i1@a
 
 and*,and2,1,o1@o,2,i1@a,i2@b
 and2,and2,1,o1@o,2,i1@a,i2@b
@@ -61,3 +61,16 @@ xnor8,xnor8,1,o1@o,8,i1@a,i2@b,i3@c,i4@d,i5@e,i6@f,i7@g,i8@h
 
 mux2,mux2,1,o@o,3,d0@a,d1@b,s@c
 bufif1,and2,1,o1@o,2,i1@a,i2@b
+
+NR2,nor2,1,Z@o,2,A@a,B@b
+NR3,nor3,1,Z@o,3,A@a,B@b,C@c
+ND2,nand2,1,Z@o,2,A@a,B@b
+ND3,nand3,1,Z@o,3,A@a,B@b,C@c
+AN2,and2,1,Z@o,2,A@a,B@b
+AN3,and3,1,Z@o,3,A@a,B@b,C@c
+OR2,or2,1,Z@o,2,A@a,B@b
+OR3,or3,1,Z@o,3,A@a,B@b,C@c
+EO,xor2,1,Z@o,2,A@a,B@b
+EN,xnor2,1,Z@o,2,A@a,B@b
+IV,not,1,Z@o,1,A@a
+FD2,FD2,2,Q@Q,QN@QN,3,D@D,CD@CD,CP@CP

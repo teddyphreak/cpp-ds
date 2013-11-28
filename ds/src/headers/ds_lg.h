@@ -13,9 +13,11 @@
 #include "ds_common.h"
 #include "ds_structural.h"
 #include "ds_pattern.h"
+#include <boost/log/trivial.hpp>
 
 namespace ds_faults {
 	class SimulationHook;
+	struct SAFaultDescriptor;
 }
 
 namespace ds_lg {
@@ -51,9 +53,18 @@ namespace ds_lg {
 		 */
 		lg_v64 operator~() const{
 			lg_v64 o;
-			o.v = ~v;
+			o.v = ~v & ~x;
 			o.x = x;
 			return o;
+		}
+
+		lg_v64& operator=(const lg_v64 &rhs) {
+			if (this != &rhs) {
+				v = rhs.v;
+				x = rhs.x;
+			}
+
+			return *this;
 		}
 		/*!
 		 * unary 'and'
@@ -227,12 +238,13 @@ namespace ds_lg {
 		ds_structural::Gate *gate;				//!< equivalent gate in netlist
 		std::vector<LGNode*> outputs;			//!< output nodes
 		std::vector<LGNode*> inputs;			//!< input nodes
-		std::vector<ds_faults::SimulationHook*> hooks;
+		std::list<ds_faults::SimulationHook*> hooks;
+
 		/*!
 		 * initializes public members. By default the node is not an endpoint.
 		 * @param t node type
 		 */
-		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t){}
+		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t),iteration(-1){}
 		/*!
 		 * sets the equivalent gate in the netlist
 		 * @param g equivalent gate in the netlist
@@ -251,6 +263,7 @@ namespace ds_lg {
 		 * Calculation of simulation values with fault injection. Derived classes override this method to calculate the value of this node's outputs
 		 * by evaluating this node's inputs and faults
 		 */
+
 		virtual void hook()=0;
 		/*!
 		 * simulation procedure. The current output values is first stored, then new values are calculated.
@@ -259,19 +272,30 @@ namespace ds_lg {
 		 * @return true if an event is propagated to the output nodes
 		 */
 		virtual bool propagate(bool intermediate) {
-			bo = o;		// save current state
-			if (intermediate)
-				hook();		// handle hooks and calculate new values
-			else
+
+			if (intermediate){
+				if (hooks.size()!=0){
+					hook();		// handle hooks and calculate new values
+				}else{
+					sim();
+				}
+			} else{
 				sim();		// calculate new values
+			}
+			observe();
+
+			if (!endpoint){
+				ds_common::int64 result = ~o.x & (o.v ^ bo.v);
+				return  result != 0;
+			}
+			return false;
+		}
+
+		void observe(){
 			for (monitor_container::iterator it = monitors.begin();it!=monitors.end();it++){
 				Monitor *m = *it;
 				m->observe(o);		// log any simulation events
 			}
-			// propagate event if values changed and this node is not an endpoint
-			if (!endpoint)
-				return (bo.v!=o.v || bo.x!=o.x);
-			return false;
 		}
 		/*!
 		 * gets the primitive value address of an input port. If the provided name cannot be found null is returned
@@ -313,6 +337,19 @@ namespace ds_lg {
 		 */
 		void add_monitor(Monitor* m){monitors.push_back(m);}
 		/*!
+		 * removes the provided monitor from the monitor container
+		 */
+		void remove_monitor(Monitor* m){
+			auto m_it =std::find(monitors.begin(), monitors.end(), m);
+			monitors.erase(m_it);
+		}
+		/*!
+		 * removes all monitors in this node
+		 */
+		void remove_monitors(){
+			monitors.clear();
+		}
+		/*!
 		 * returns the current number of monitors this node has
 		 * @return
 		 */
@@ -335,11 +372,52 @@ namespace ds_lg {
 		 * revert output to previous value
 		 */
 		virtual void rollback(){o = bo;}
-
+		/*!
+		 * save the output value of the base simulation
+		 */
+		void mark() {bo = o;}
+		/*!
+		 * queires the output value of the base simulation
+		 * @return
+		 */
+		lg_v64 get_mark() const {return bo;}
+		/*!
+		 * set output value to the complement of the simulation value
+		 */
+		virtual void flip(){o = ~bo;};
+		/*!
+		 * set output value to the complement of the simulation value and apply any attached observer
+		 */
+		void flip_and_observe(){
+			flip();
+			observe();
+		}
+		/*!
+		 * sets an internal pointer to the emcompasing leveled graph
+		 * @param graph
+		 */
 		void set_leveled_graph(LeveledGraph *graph) {
 			lg = graph;
 		}
-
+		/*!
+		 * adds a hook to be executed during the propagate method.
+		 * This hook may or may not be registered in the encompassing leveled graph
+		 * @param h
+		 */
+		void add_hook(ds_faults::SimulationHook* h){
+			hooks.push_back(h);
+		}
+		void remove_hook(ds_faults::SimulationHook* h){
+			auto it = std::find(hooks.begin(), hooks.end(), h);
+			if (it!=hooks.end())
+				hooks.remove(h);
+		}
+		/*!
+		 * remove all hooks in this node
+		 */
+		void remove_hooks(){
+			hooks.clear();
+		}
 	protected:
 		lg_v64 o; 						//!< node output
 		lg_v64 bo;						//!< backup node output
@@ -347,6 +425,7 @@ namespace ds_lg {
 		std::string type;				//!< node type
 		monitor_container monitors;		//!< monitor container
 		LeveledGraph* lg;
+		double iteration;
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
 		 */
@@ -515,7 +594,15 @@ namespace ds_lg {
 		/*!
 		 * calculate output value by evaluating simulation function with 2 inputs
 		 */
-		virtual void sim() {o = (*A)(a,b);}
+		virtual void sim() {
+			//std::string f_name = get_name();
+			//std::size_t si = f_name.find("inst_12851");
+			//if (si!=std::string::npos){
+			//	std::cout << std::hex << f_name << ":" << o.v << "(" << (a->v) << "[" << &a->v << "]" << ","<< (b->v) << "[" << &b->v << "]" <<")" << std::endl;
+			//}
+			o = (*A)(a,b);
+			return;
+		}
 		/*!
 		 * calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
 		 */
@@ -552,7 +639,14 @@ namespace ds_lg {
 		/*!
 		 * calculate output value by evaluating simulation function with 3 inputs
 		 */
-		virtual void sim() {o = (*A)(a,b,c);}
+		virtual void sim() {
+//			std::string f_name = get_name();
+//			std::size_t si = f_name.find("inst_12853");
+//			if (si!=std::string::npos){
+//				std::cout << std::hex << "               " <<f_name << ":" << o.v << "(" << (a->v) << "[" << &a->v << "]" << ","<< (b->v) << "[" << &b->v << "]" << (c->v) << "[" << &c->v << "]" <<")" << std::endl;
+//			}
+			o = (*A)(a,b,c);
+		}
 		/*!
 		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
 		 */
@@ -780,7 +874,7 @@ namespace ds_lg {
 	 */
 	class LGNodeArr : public LGNode {
 	protected:
-		int inputSize;								//!< number of inputs
+		int input_size;								//!< number of inputs
 		lg_v64 (*A)(val64_cpc a, val64_cpc b);		//!< pointer to a function expecting 2 simulation value and returning 1 simulation value
 		lg_v64 ** input_array;						//!< input array
 		bool invert;								//!< true if simulation result is inverted
@@ -790,10 +884,9 @@ namespace ds_lg {
 		 */
 		virtual void sim() {
 			o = **input_array;
-			for (int i=1;i<inputSize;i++){
+			for (int i=1;i<input_size;i++){
 				o = (*A)(&o, input_array[i]);		//!< aggregate results by evaluating binary simulation function
 			}
-			//invert result if necessary e.g. ~(A|B|C)
 			if(invert)
 				o = ~o;
 		}
@@ -809,14 +902,14 @@ namespace ds_lg {
 		 * @param AA binary simulation function
 		 * @param iv inversion flag
 		 */
-		LGNodeArr(const std::string& t, const int& inputs, lg_v64 (*AA)(val64_cpc, val64_cpc), bool iv):LGNode(t), inputSize(inputs), A(AA), invert(iv){
-			input_array = new lg_v64*[inputSize];
+		LGNodeArr(const std::string& t, const int& inputs, lg_v64 (*AA)(val64_cpc, val64_cpc), bool iv):LGNode(t), input_size(inputs), A(AA), invert(iv){
+			input_array = new lg_v64*[input_size];
 		};
 		/*!
 		 * allocate new LGNodeArr instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNodeArr(type, inputSize, A, invert); }
+		virtual LGNode* clone() { return new LGNodeArr(type, input_size, A, invert); }
 		/*!
 		 * returns an output primitive value. Variable-input gates are usually instantiated implicitly. To allow the most inputs without ambiguity, the output name is 'z'
 		 * @param name output port name
@@ -861,6 +954,7 @@ namespace ds_lg {
 			 * revert output to previous value
 			 */
 			virtual void rollback(){o = bo; on = ~bo;}
+			virtual void flip(){o = ~o; on = o;};
 			LGState(const std::string& t):LGNode(t){endpoint = true;};
 			/*!
 			 * allocate new LGState instance according to the prototype pattern
@@ -894,7 +988,7 @@ namespace ds_lg {
 	typedef lg_node_container::iterator lg_node_iterator;
 	typedef std::vector<Input*> lg_input_container;
 	typedef std::vector<Output*> lg_output_container;
-	typedef std::vector<ds_faults::SimulationHook*> hook_container;
+	typedef std::list<ds_faults::SimulationHook*> hook_container;
 
 	class LeveledGraph {
 
@@ -908,6 +1002,11 @@ namespace ds_lg {
 		lg_node_container registers;	//!< all sequential elements
 		hook_container hooks;			//!< all active hooks
 
+		void add_node(LGNode* n){
+			nodes.push_back(n);
+			registry[n->get_name()] = n;
+		}
+
 		/*!
 		 * verify the internal structure of the graph
 		 * @return true if check is successful
@@ -917,12 +1016,18 @@ namespace ds_lg {
 		 * adds an input port
 		 * @param in input port
 		 */
-		void add_input(Input* in){inputs.push_back(in);}
+		void add_input(Input* in){
+			inputs.push_back(in);
+			registry[in->get_name()] = in;
+		}
 		/*!
 		 * adds an output port
-		 * @param iout output port
+		 * @param out output port
 		 */
-		void add_output(Output* out){outputs.push_back(out);}
+		void add_output(Output* out){
+			outputs.push_back(out);
+			registry[out->get_name()] = out;
+		}
 		/*
 		 * various iterators for input and output traversal
 		 */
@@ -940,43 +1045,31 @@ namespace ds_lg {
 		 * @param pb
 		 */
 		void sim(ds_pattern::SimPatternBlock * pb);
-		/*!
-		 * find an output by name
-		 * @param name name of desired output
-		 * @return pointer to desired output
-		 */
-		Output* get_output(const std::string name){
-			lg_output_container::iterator n = std::find_if(outputs.begin(), outputs.end(), [&](Output* o) {
-				return name == o->get_name();
-			});
-			if (n == outputs.end())
-				return 0;
-			return *n;
-		}
+
 		/*!
 		 * find a node by name
 		 * @param name name of desired node
 		 * @return pointer to desired node
 		 */
 		LGNode* get_node(const std::string name){
-			lg_node_iterator n = std::find_if(nodes.begin(), nodes.end(), [&](LGNode* p) {
-				return name == p->get_name();
-			});
-			if (n == nodes.end())
-				return 0;
-			return *n;
+			auto it = registry.find(name);
+			if(it!=registry.end())
+				return it->second;
+			return 0;
 		}
 
 		/*!
 		 * adds a new hook to be executed during logic simulation
 		 * @param hook
 		 */
-		void add_hook(ds_faults::SimulationHook* hook){hooks.push_back(hook);};
+		void add_hook(ds_faults::SimulationHook* hook);
 
 		/*!
 		 * removes all active hooks
 		 */
-		void clear_hooks(){hooks.clear();}
+		void clear_hooks();
+
+		void clear_hook(ds_faults::SimulationHook* hook);
 
 		/*!
 		 * evaluate nodes in simulation and manage simulation events
@@ -987,17 +1080,42 @@ namespace ds_lg {
 		 * push node into event simulation node list
 		 * @param node node to include
 		 */
-		void push_node(LGNode *node){simulation[node->level].push_back(node);}
+		void push_node(LGNode *node){
+			simulation[node->level]->push_back(node);
+		}
+		/*!
+		 * returns the check point of any given node:
+		 * It returns the argument node pointer is an input, output or fan out node, otherwise
+		 * the argument's fan out node is returned
+		 * @param n node whose check point is requested
+		 * @return
+		 */
+		LGNode* get_check_point(LGNode* n);
+		/*!
+		 * returns a pointer to the netlist associated with this graph
+		 * @return
+		 */
+		ds_structural::NetList* get_netlist() const {return nl;}
+		/*!
+		 *
+		 * @param h hook to propagate
+		 * @return for each pattern / fault,
+		 * returns 1 in position i if the hook can be propagaed to its check point in the ith slot
+		 */
+		ds_common::int64 propagate_to_check_point(ds_faults::SimulationHook *h);
 
 	protected:
-		std::size_t num_levels;								//!< number of levels in the graph
+		int num_levels;										//!< number of levels in the graph
 		ds_pattern::SimPatternBlock *pattern_block; 		//!< current pattern block for simulation
 		std::vector<lg_node_iterator> levels;				//!< level iterators. Two iterators define the nodes in a level
-		std::vector<lg_node_container> simulation;			//!< nodes to evaluate during intermediate simulation
+		std::vector<lg_node_container*> simulation;			//!< nodes to evaluate during intermediate simulation
 		std::vector<unsigned int> level_width;				//!< number of nodes per level
 		lg_v64 constant_0 = lg_v64(0L,0L);
 		lg_v64 constant_1 = lg_v64(-1L,0L);
 		lg_v64 constant_X = lg_v64(0L,-1L);
+		ds_structural::NetList *nl;
+		std::map<std::string, LGNode*> registry;
+		double iteration;
 	};
 }
 
