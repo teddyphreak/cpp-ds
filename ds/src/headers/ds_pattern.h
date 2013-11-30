@@ -14,6 +14,7 @@
 #include "stdio.h"
 #include <fstream>
 #include <map>
+#include <iostream>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/spirit/repository/include/qi_distinct.hpp>
 #include <boost/spirit/include/qi.hpp>
@@ -29,15 +30,14 @@
 #include <boost/spirit/include/phoenix_object.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/fusion/include/io.hpp>
-#include <iostream>
+#include <boost/serialization/access.hpp>
+#include <boost/serialization/vector.hpp>
 
-namespace ds_lg {
-	struct lg_v64;
-}
 
 namespace ds_pattern {
 
 using ds_common::int64;
+using ds_common::lg_v64;
 
 /*
  * Data structures for pattern parsing
@@ -310,12 +310,13 @@ namespace ds_pattern {
 		port_definition::const_iterator end_port_order() const {return port_order.end();}
 	};
 
-	typedef std::vector<ds_lg::lg_v64> PatternBlock;
+	typedef std::vector<lg_v64> PatternBlock;
 
 	/*!
 	 * contains a block of 64 patterns encoded with a sequence of lg_v64 values
 	 */
-	struct SimPatternBlock {
+	class SimPatternBlock {
+	public:
 		int num_patterns;		//!< number of patterns in the block (<64)
 		ds_common::int64 mask;
 		PatternBlock values;	//!< sequence of pattern values
@@ -331,6 +332,16 @@ namespace ds_pattern {
 		SimPatternBlock(const SimPatternBlock& spb):num_patterns(spb.num_patterns),mask(spb.mask){
 			values.insert(values.begin(), spb.values.begin(), spb.values.end());
 		}
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version){
+			ar & num_patterns;
+			ar & mask;
+			ar & values;
+		}
+
+		SimPatternBlock(){}
 	};
 
 	/*!
@@ -414,6 +425,8 @@ namespace ds_pattern {
 		virtual std::string get_name(const int& idx) const;
 
 
+		virtual ~CombinationalPatternProvider(){}
+
 	private:
 
 		unsigned int total_ports;			//!< total number of ports
@@ -423,6 +436,20 @@ namespace ds_pattern {
 		unsigned int num_outputs;			//!< number of outputs
 		std::vector<SimPatternBlock> values;	//!< internal pattern block representation
 		std::vector<std::string> ports;			//!< port order
+
+		CombinationalPatternProvider(){}
+
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version){
+			ar & total_ports;
+			ar & blockIndex;
+			ar & output_offset;
+			ar & num_inputs;
+			ar & num_outputs;
+			ar & values;
+			ar & ports;
+		}
 
 	};
 

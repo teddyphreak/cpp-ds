@@ -4,11 +4,11 @@
  *  Created on: 24.03.2013
  *      Author: cookao
  */
+#include "ds_lg.h"
 #include "ds_pattern.h"
 #include <fstream>
 #include "ds_common.h"
 #include "ds_common.h"
-#include "ds_lg.h"
 #include <boost/exception/all.hpp>
 #include <boost/spirit/include/support_istream_iterator.hpp>
 #include <boost/log/trivial.hpp>
@@ -17,7 +17,6 @@ ds_pattern::PatternList* ds_pattern::parse_wgl(const std::string& file, bool com
 
 	namespace spirit = boost::spirit;
 
-	std::cout << file << std::endl;
 	std::ifstream input(file.c_str());
 	input.unsetf(std::ios::skipws);
 	ds_pattern::PatternList* pl = 0;
@@ -187,3 +186,4 @@ std::size_t ds_pattern::CombinationalPatternProvider::get_offset(const std::stri
 std::string ds_pattern::CombinationalPatternProvider::get_name(const int& idx) const {
 	return ports[idx];
 }
+

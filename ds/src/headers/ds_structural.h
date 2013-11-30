@@ -19,13 +19,12 @@
 #include <boost/bind.hpp>
 #include <boost/checked_delete.hpp>
 #include "ds_common.h"
-#include "ds_common.h"
+#include <boost/serialization/access.hpp>
+#include <boost/serialization/base_object.hpp>
 
 namespace ds_lg {
 	class LGNode;
 	class LeveledGraph;
-	struct lg_v64;
-
 }
 
 namespace ds_library {
@@ -65,6 +64,16 @@ namespace ds_structural {
 		Signal* signal; 	//!< signal connected to this port
 		Gate* gate;     	//!< gate to which this port belongs
 		PortType type;		//!< port type
+
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & name;
+		    ar & signal;
+		    ar & gate;
+		    ar & type;
+		}
+
 	public:
 		/*!
 		 * port constructor. All members specified
@@ -137,6 +146,14 @@ namespace ds_structural {
 		std::string name; 			//!< signal name
 		sp_container ports; 		//!< port container
 		ds_common::Value val; 	//!< simulation value
+
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & name;
+		    ar & ports;
+		    ar & val;
+		}
 	public:
 		/*!
 		 * returns the signal name
@@ -221,6 +238,17 @@ namespace ds_structural {
 		 * @param g reference gate
 		 */
 		void copy(Gate *g);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & name;
+		    ar & type;
+		    ar & inputs;
+		    ar & outputs;
+		    ar & mappings;
+		    ar & parent;
+		}
 	public:
 		/*!
 		 * gate constructor: produces and "empty" gate. All structural information must be provided
@@ -369,6 +397,17 @@ namespace ds_structural {
 		signal_map_t own_signals;					//!< auxiliary signals
 		assignment_map_t assignment_map;
 		ds_lg::LeveledGraph* lg;						//!< corresponding leveled graph instance
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<Gate>(*this);
+			ar & gates;
+		    ar & signals;
+		    ar & signal_counter;
+		    ar & own_signals;
+		    ar & assignment_map;
+		    ar & lg;
+		}
 		/*!
 		 * trace forward the receivers of a port and connect simulation primitives.
 		 * @param pb port to trace
@@ -377,7 +416,7 @@ namespace ds_structural {
 		 * @param trace contains the gates traced so far (avoid infinite loops)
 		 * @param todo gates to trace in next iteration
 		 */
-		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_lg::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
+		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_common::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
 		/*!
 		 * traces an input port backwards to find unused gates and deletes unconnected signals
 		 * @param pb input port to trace
@@ -542,7 +581,7 @@ namespace ds_structural {
 		 * @param pb port input to drive
 		 * @param driver simulation output
 		 */
-		void drive(PortBit*pb, ds_lg::lg_v64 *driver);
+		void drive(PortBit*pb, ds_common::lg_v64 *driver);
 
 	};
 

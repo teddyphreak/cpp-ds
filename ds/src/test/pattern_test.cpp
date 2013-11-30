@@ -26,7 +26,7 @@ void pattern_test::wgl_import_test(std::string& name) {
 	std::string path = d?d:"";
 	try {
 		std::string file = path + "/files/" + name;
-		std::cout << "... importing " << file << std::endl;
+		BOOST_LOG_TRIVIAL(info) << "... importing " << file;
 		ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_pattern_blocks(file, false);
 
 		namespace spirit = boost::spirit;
