@@ -124,7 +124,9 @@ namespace ds_workspace {
 
 			ds_structural::NetList *netlist = 0;
 			auto par_it =	std::find_if(parsed_netlists.begin(), parsed_netlists.end(),
-			boost::bind(&ds_library::parse_netlist::nl_name, _1)==name);
+				[&] (ds_library::parse_netlist& pn){
+				return pn.nl_name == name;
+			});
 			if (par_it != parsed_netlists.end()){
 				std::size_t p = par_it->ports.size();
 				if (p == ports){
@@ -181,6 +183,8 @@ namespace ds_workspace {
 		Workspace(){};					//!< hide default constructor
 
 	};
+
+	ds_structural::NetList* load_netlist(const std::string& toplevel, const std::string& path);
 }
 
 #endif /* DS_WORKSPACE_H_ */

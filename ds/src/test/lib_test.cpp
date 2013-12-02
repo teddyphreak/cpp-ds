@@ -10,7 +10,6 @@
 #include "lib_test.h"
 
 using namespace ds_library;
-using namespace ds_structural;
 
 void lib_test::lib_open_test() {
 
@@ -59,21 +58,19 @@ void lib_test::lib_gate_query_test() {
 
 	LibraryFactory *factory = LibraryFactory::getInstance();
 	Library *defaultLib = factory->load_library();
-		Gate* g = defaultLib->get_gate("and4",5);
+	ds_structural::Gate* g = defaultLib->get_gate("and4",5);
 	BOOST_ASSERT(g!=0);
 	BOOST_ASSERT(g->get_type()=="and4");
 	BOOST_ASSERT(g->get_lgn()!=0);
 	BOOST_ASSERT(g->get_num_ports()==5);
 	std::size_t inputs = 0;
-	typedef port_container::const_iterator IT;
-	for (IT it=g->get_inputs()->begin();it!=g->get_inputs()->end();it++){
+	for (auto it=g->get_inputs()->begin();it!=g->get_inputs()->end();it++){
 		std::string name = (*it)->get_instance_name();
 		BOOST_ASSERT(!(g->get_mapping(name)).empty());
 		inputs++;
 	}
 	std::size_t outputs = 0;
-	typedef port_container::const_iterator IT;
-	for (IT it=g->get_outputs()->begin();it!=g->get_outputs()->end();it++){
+	for (auto it=g->get_outputs()->begin();it!=g->get_outputs()->end();it++){
 		std::string name = (*it)->get_instance_name();
 		BOOST_ASSERT(!(g->get_mapping(name)).empty());
 		outputs++;
@@ -88,15 +85,13 @@ void lib_test::lib_gate_query_test() {
 	BOOST_ASSERT(g->get_inputs()->size()==6);
 	BOOST_ASSERT(g->get_outputs()->size()==1);
 	inputs = 0;
-	typedef port_container::const_iterator IT;
-	for (IT it=g->get_inputs()->begin();it!=g->get_inputs()->end();it++){
+	for (auto it=g->get_inputs()->begin();it!=g->get_inputs()->end();it++){
 		std::string name = (*it)->get_instance_name();
 		BOOST_ASSERT(!(g->get_mapping(name)).empty());
 		inputs++;
 	}
 	outputs = 0;
-	typedef port_container::const_iterator IT;
-	for (IT it=g->get_outputs()->begin();it!=g->get_outputs()->end();it++){
+	for (auto it=g->get_outputs()->begin();it!=g->get_outputs()->end();it++){
 		std::string name = (*it)->get_instance_name();
 		BOOST_ASSERT(!(g->get_mapping(name)).empty());
 		outputs++;

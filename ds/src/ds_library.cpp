@@ -260,7 +260,9 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Error parsing verilog file"));
 	}
 
-	auto top = std::find_if(netlists.begin(), netlists.end(), bind(&parse_netlist::nl_name, _1) == toplevel);
+	auto top = std::find_if(netlists.begin(), netlists.end(), 	[&] (ds_library::parse_netlist& pn){
+		return pn.nl_name == toplevel;
+	});
 	if (top == netlists.end()){
 		BOOST_LOG_TRIVIAL(error) << "Design " << toplevel << " not found";
 		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Design " + toplevel + " not found"));
@@ -570,3 +572,9 @@ void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_expli
 	//TODO
 }
 
+void ds_library::load_default_lib(){
+	LibraryFactory *factory = LibraryFactory::getInstance();
+	Library *defaultLib = factory->load_library();
+	ds_workspace::Workspace *wp = ds_workspace::Workspace::get_workspace();
+	wp->add_library(defaultLib);
+}

@@ -32,7 +32,9 @@ bool ds_workspace::Workspace::is_defined(const std::string& name, std::size_t po
 	}
 	if (!found){
 		auto par_it =	std::find_if(parsed_netlists.begin(), parsed_netlists.end(),
-			boost::bind(&ds_library::parse_netlist::nl_name, _1)==name);
+			[&] (ds_library::parse_netlist& pn){
+				return pn.nl_name == name;
+		});
 		if (par_it != parsed_netlists.end()){
 			std::size_t p = par_it->ports.size();
 			if (p == ports){
@@ -43,3 +45,11 @@ bool ds_workspace::Workspace::is_defined(const std::string& name, std::size_t po
 	return found;
 }
 
+ds_structural::NetList* ds_workspace::load_netlist(const std::string& toplevel, const std::string& path){
+	ds_structural::NetList* nl = 0;
+	Workspace *wp = ds_workspace::Workspace::get_workspace();
+	nl = ds_library::import(path, toplevel, wp);
+	nl->remove_floating_signals();
+	while (nl->remove_unused_gates());
+	return nl;
+}

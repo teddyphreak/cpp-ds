@@ -24,8 +24,7 @@ void sim_test::test_fc(){
 };
 
 void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
-	ds_library::LibraryFactory *factory = ds_library::LibraryFactory::getInstance();
-	ds_library::Library *defaultLib = factory->load_library();
+	ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
@@ -34,14 +33,7 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, true);
-	ds_workspace::Workspace* wp = ds_workspace::Workspace::get_workspace();
-	wp->add_library(defaultLib);
-	ds_structural::NetList* nl = ds_library::import(design_file, top, wp);
-	nl->remove_floating_signals();
-	bool r = nl->remove_unused_gates();
-	while (r)
-		r = nl->remove_unused_gates();
-
+	ds_structural::NetList* nl = ds_workspace::load_netlist(design_file, top);
 	ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
 	BOOST_LOG_TRIVIAL(debug) << "Calculating fault set...";
 	ds_faults::FaultList fl(nl);
@@ -58,21 +50,13 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 }
 
 void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_file, const std::string& top){
-	ds_library::LibraryFactory *factory = ds_library::LibraryFactory::getInstance();
-	ds_library::Library *defaultLib = factory->load_library();
+	ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	std::string path = d?d:"";
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, false);
-	ds_workspace::Workspace* wp = ds_workspace::Workspace::get_workspace();
-	wp->add_library(defaultLib);
-	ds_structural::NetList* nl = ds_library::import(design_file, top, wp);
-	nl->remove_floating_signals();
-	bool r = nl->remove_unused_gates();
-	while (r)
-		r = nl->remove_unused_gates();
-
+	ds_structural::NetList* nl = ds_workspace::load_netlist(design_file, top);
 	ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
 	lg->adapt(provider);
 

@@ -8,12 +8,14 @@
 #ifndef DS_LG_H_
 #define DS_LG_H_
 
-#include <boost/bind.hpp>
-#include <vector>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/map.hpp>
 #include "ds_common.h"
 #include "ds_structural.h"
 #include "ds_pattern.h"
 #include <boost/log/trivial.hpp>
+#include <boost/serialization/access.hpp>
+#include <boost/serialization/base_object.hpp>
 
 namespace ds_faults {
 	class SimulationHook;
@@ -212,6 +214,9 @@ namespace ds_lg {
 		 * @return a newly allocated node instance
 		 */
 		virtual LGNode* clone()=0;
+		/*!
+		 * Virtual destructor
+		 */
 		virtual ~LGNode(){};
 		/*!
 		 * returns node type
@@ -290,7 +295,7 @@ namespace ds_lg {
 			observe();
 		}
 		/*!
-		 * sets an internal pointer to the emcompasing leveled graph
+		 * sets an internal pointer to the encompasing leveled graph
 		 * @param graph
 		 */
 		void set_leveled_graph(LeveledGraph *graph) {
@@ -331,6 +336,22 @@ namespace ds_lg {
 		 * processes all hooks at the output ports. Commodity function
 		 */
 		void hook_outputs();
+	private:
+	friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & level;
+			ar & gate;
+			ar & inputs;
+			ar & outputs;
+			ar & type;
+			ar & o;
+			ar & bo;
+			ar & endpoint;
+			ar & type;
+			ar & lg;
+			ar & iteration;
+		}
 	};
 
 	/*!
@@ -378,6 +399,14 @@ namespace ds_lg {
 		virtual lg_v64** get_input(const std::string& name){
 			if (name == "a") return &a;
 			return 0;
+		}
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & name;
 		}
 	};
 
@@ -443,6 +472,14 @@ namespace ds_lg {
 		 * @return
 		 */
 		std::size_t get_offset() const {return offset;}
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & name;
+			ar & offset;
+		}
 	};
 
 	/*!
@@ -478,6 +515,14 @@ namespace ds_lg {
 		 * @return pointer to this node's input value. Null is name does not match.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 2-input gates
@@ -521,6 +566,15 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 3-input gates
@@ -565,6 +619,16 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 4-input gates
@@ -603,6 +667,17 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & d;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 5-input gates
@@ -642,6 +717,18 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & d;
+			ar & e;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 6-input gates
@@ -682,6 +769,19 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & d;
+			ar & e;
+			ar & f;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 7-input gates
@@ -723,6 +823,19 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & d;
+			ar & e;
+			ar & f;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for 8-input gates
@@ -765,6 +878,20 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & a;
+			ar & b;
+			ar & c;
+			ar & d;
+			ar & e;
+			ar & f;
+			ar & g;
+			ar & A;
+		}
 	};
 	/*!
 	 * Simulation primitive for variable-input gates
@@ -825,6 +952,16 @@ namespace ds_lg {
 		virtual ~LGNodeArr(){
 			delete[] input_array;
 		};
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & boost::serialization::base_object<LGNode>(*this);
+			ar & input_size;
+			ar & A;
+			ar & input_array;
+			ar & invert;
+		}
 	};
 	/*!
 	 * Simulation primitive for generic sequential gates
@@ -878,7 +1015,19 @@ namespace ds_lg {
 			 * @return
 			 */
 			virtual bool has_state() {return true;}
+			/*!
+			 * Virtual destructor
+			 */
 			virtual ~LGState(){};
+		private:
+			friend class boost::serialization::access;
+			template<class Archive>
+			void serialize(Archive & ar, const unsigned int version) {
+				ar & boost::serialization::base_object<LGNode>(*this);
+				ar & d;
+				ar & cd;
+				ar & on;
+			}
 		};
 
 	typedef std::vector<LGNode*> lg_node_container;
@@ -997,7 +1146,7 @@ namespace ds_lg {
 		 *
 		 * @param h hook to propagate
 		 * @return for each pattern / fault,
-		 * returns 1 in position i if the hook can be propagaed to its check point in the ith slot
+		 * returns 1 in position i if the hook can be propaated to its check point in the ith slot
 		 */
 		ds_common::int64 propagate_to_check_point(ds_faults::SimulationHook *h);
 
@@ -1013,6 +1162,21 @@ namespace ds_lg {
 		ds_structural::NetList *nl;
 		std::map<std::string, LGNode*> registry;
 		double iteration;
+	private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version) {
+			ar & inputs;
+			ar & outputs;
+			ar & nodes;
+			ar & registers;
+			ar & num_levels;
+			ar & simulation;
+			ar & level_width;
+			ar & nl;
+			ar & registry;
+			ar & iteration;
+		}
 	};
 }
 

@@ -32,13 +32,13 @@ void ds_structural::Gate::copy(ds_structural::Gate* g){
 		PortBit *pb = *it;
 		PortBit *c = new PortBit(pb->get_instance_name(), g, pb->get_type());
 		g->add_port(c);
-		c->setGate(g);
+		c->set_gate(g);
 	}
 	for (port_container::iterator it=outputs.begin();it!=outputs.end();it++){
 		PortBit *pb = *it;
 		PortBit *c = new PortBit(pb->get_instance_name(), g, pb->get_type());
 		g->add_port(c);
-		c->setGate(g);
+		c->set_gate(g);
 	}
 	typedef function_map_t::iterator IT;
 	for (IT it=mappings.begin();it!=mappings.end();it++){
@@ -173,7 +173,7 @@ bool ds_structural::NetList::check_netlist(){
 	for (auto it=signals.begin();it!=signals.end();it++){
 		ds_structural::Signal *s = it->second;
 		std::list<PortBit*>::const_iterator port_it = s->port_begin();
-		std::list<PortBit*>::const_iterator end = s->port_begin();
+		std::list<PortBit*>::const_iterator end = s->port_end();
 		int drivers = 0;
 		for (;port_it!=end;port_it++){
 			ds_structural::PortBit *pb = *port_it;
@@ -711,4 +711,38 @@ void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<co
 			}
 		}
 	}
+}
+
+void ds_structural::save_netlist(const std::string& file, ds_structural::NetList *nl){
+	std::ofstream ofs(file);
+	boost::archive::text_oarchive oa(ofs);
+	oa << nl;
+}
+
+ds_structural::NetList* ds_structural::load_netlist(const std::string& file){
+	NetList *nl = 0;
+	std::ifstream ifs(file);
+	boost::archive::text_iarchive ia(ifs);
+	ia >> nl;
+
+	//Fix gate memeber of PortBit
+	//Not serialized for circular serialization dependency
+	for (PortBit *pb: nl->inputs){
+		pb->set_gate(nl);
+	}
+	for (PortBit *pb: nl->outputs){
+		pb->set_gate(nl);
+	}
+	for (auto it=nl->gates.begin();it!=nl->gates.end();it++){
+		Gate* g = it->second;
+		for (PortBit *pb: g->inputs){
+			pb->set_gate(g);
+		}
+		for (PortBit *pb: g->outputs){
+			pb->set_gate(g);
+		}
+	}
+
+
+	return nl;
 }

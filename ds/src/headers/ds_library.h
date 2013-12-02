@@ -126,7 +126,7 @@ namespace ds_library {
 				g = new ds_structural::Gate();
 				g->set_type(name);
 				ds_structural::PortBit *o_port = new ds_structural::PortBit("Z", ds_structural::DIR_OUT);
-				o_port->setGate(g);
+				o_port->set_gate(g);
 				g->add_port(o_port);
 				g->add_mapping("Z", "z");
 				char lgn_port = 'a';
@@ -134,7 +134,7 @@ namespace ds_library {
 					std::string port_name;
 					port_name += (char)i;
 					ds_structural::PortBit *i_port = new ds_structural::PortBit(port_name, ds_structural::DIR_IN);
-					i_port->setGate(g);
+					i_port->set_gate(g);
 					g->add_port(i_port);
 					std::string lgn_port_name;
 					lgn_port_name += lgn_port;
@@ -694,7 +694,7 @@ namespace ds_library {
 			netlist->add_signal(s);
 			if (create_port) {
 				ds_structural::PortBit *pb = new ds_structural::PortBit(name, type);
-				pb->setGate(netlist);
+				pb->set_gate(netlist);
 				netlist->add_port(pb);
 				pb->set_signal(s);
 				s->add_port(pb);
@@ -763,6 +763,8 @@ namespace ds_library {
 	};
 
 	bool parse_verilog(const std::string& name, std::vector<parse_netlist>& netlists);
+
+	void load_default_lib();
 
 }
 

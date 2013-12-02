@@ -5,12 +5,16 @@
  *      Author: cookao
  */
 #include <boost/test/unit_test.hpp>
-#include <boost/archive/binary_oarchive.hpp>
-#include <boost/archive/binary_iarchive.hpp>
 #include <boost/log/trivial.hpp>
-#include <fstream>
 #include "serialization_test.h"
 #include "ds_pattern.h"
+#include "ds_library.h"
+#include "ds_structural.h"
+#include "ds_workspace.h"
+
+using namespace ds_library;
+using namespace ds_structural;
+using namespace ds_workspace;
 
 
 void serialization_test::serialize_paterns(const std::string& name) {
@@ -27,7 +31,7 @@ void serialization_test::serialize_paterns(const std::string& name) {
 
 	{
 		std::ofstream ofs(p_name);
-		boost::archive::binary_oarchive oa(ofs);
+		boost::archive::text_oarchive oa(ofs);
 		oa << p;
 	}
 
@@ -37,7 +41,7 @@ void serialization_test::serialize_paterns(const std::string& name) {
 	{
 
 		std::ifstream ifs(p_name);
-		boost::archive::binary_iarchive ia(ifs);
+		boost::archive::text_iarchive ia(ifs);
 		ia >> r;
 	}
 
@@ -64,5 +68,33 @@ void serialization_test::serialize_paterns(const std::string& name) {
 	}
 }
 
+void serialization_test::serialize_netlist(const std::string& name) {
+	ds_library::load_default_lib();
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	std::string path = d?d:"";
+	std::string file = path + "/files/" + name;
+	BOOST_LOG_TRIVIAL(info) << "... reading " << file;
+	ds_structural::NetList* n = ds_workspace::load_netlist(file, "top");
+	BOOST_CHECK(n->check_netlist());
+	//ds_lg::LeveledGraph* lg = n->build_leveled_graph();
+	//BOOST_CHECK(lg->sanity_check());
 
+	BOOST_LOG_TRIVIAL(info) << " Design :" << file << " imported";
+	std::string d_name = path + "/files/" + name + ".ds";
+	ds_structural::save_netlist(d_name, n);
+
+
+	BOOST_LOG_TRIVIAL(info) << "Netlist dumped... " << file;
+
+	ds_structural::NetList* r = ds_structural::load_netlist(d_name);
+
+	BOOST_LOG_TRIVIAL(info) << "Netlist read back... " << file;
+
+	//BOOST_CHECK(r->check_netlist());
+	//ds_lg::LeveledGraph* r_lg = n->build_leveled_graph();
+	//BOOST_CHECK(r_lg->sanity_check());
+}
 

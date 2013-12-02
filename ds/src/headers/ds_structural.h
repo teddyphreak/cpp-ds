@@ -11,16 +11,19 @@
 #include <iostream>
 #include <string>
 #include <set>
-#include <list>
 #include <algorithm>
-#include <vector>
-#include <map>
 #include <stack>
-#include <boost/bind.hpp>
-#include <boost/checked_delete.hpp>
+#include <fstream>
 #include "ds_common.h"
+#include <boost/checked_delete.hpp>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/base_object.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+
 
 namespace ds_lg {
 	class LGNode;
@@ -36,6 +39,7 @@ namespace ds_structural {
 	class Signal;
 	class Gate;
 	class PortBit;
+	class NetList;
 
 	typedef std::vector<PortBit*> port_container; 	//!< holds pointers to ports used in gates
 	typedef port_container::iterator port_iterator;	//!< iterates over pointers to ports
@@ -53,7 +57,6 @@ namespace ds_structural {
 		DIR_OUT, //!< output port
 		DIR_INOUT//!< bidirectional port
 	};
-
 	/*!
 	 * this class represents a port in gate. A port has a name and a type \sa PortType.
 	 * A port belongs to a single gate and may be connected to other ports by means of a (1) signal
@@ -64,17 +67,16 @@ namespace ds_structural {
 		Signal* signal; 	//!< signal connected to this port
 		Gate* gate;     	//!< gate to which this port belongs
 		PortType type;		//!< port type
-
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
+			//Note that member gate is NOT serialized. This must be fixed when loading the instance
 			ar & name;
 		    ar & signal;
-		    ar & gate;
 		    ar & type;
 		}
-
 	public:
+		PortBit():signal(0),gate(0){}
 		/*!
 		 * port constructor. All members specified
 		 * @param n port name
@@ -102,7 +104,7 @@ namespace ds_structural {
 		 * sets the owner gate of this port
 		 * @param g
 		 */
-		void setGate(Gate * const g){gate = g;}
+		void set_gate(Gate * const g){gate = g;}
 
 		/*!
 		 * sets the signal of this port to null
@@ -134,7 +136,6 @@ namespace ds_structural {
 		 */
 		std::string get_qualified_name() const;
 		~PortBit();
-
 	};
 	/*!
 	 * represents connections between ports. It contains a signal name and a container of attached ports.
@@ -146,7 +147,6 @@ namespace ds_structural {
 		std::string name; 			//!< signal name
 		sp_container ports; 		//!< port container
 		ds_common::Value val; 	//!< simulation value
-
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
@@ -154,6 +154,7 @@ namespace ds_structural {
 		    ar & ports;
 		    ar & val;
 		}
+		Signal(){}
 	public:
 		/*!
 		 * returns the signal name
@@ -213,17 +214,17 @@ namespace ds_structural {
 		 */
 		void detach(){
 			for (ds_structural::PortBit *pb:ports){
-				pb->disconnect();
+			pb->disconnect();
 			}
 		}
 	};
-
 	/*!
 	 * represents a gate. A gate has a name and a type. It contains input and output ports.
 	 * A gate may have a parent gate (netlist) and an associated LeveledGraphNode @sa ds_lg::LGNode.
 	 * Each gate holds information to bind its ports to the inputs and outputs of a ds_lg::LGNode
 	 */
 	class Gate {
+		friend ds_structural::NetList* load_netlist(const std::string& file);
 	protected:
 		std::string name; 			//!< gate name
 		std::string type; 			//!< gate type
@@ -276,7 +277,6 @@ namespace ds_structural {
 		 * sets the name of the gate
 		 * @param n any string may be the gate name
 		 */
-
 		void set_instance_name(const std::string& n){name = n;}
 		/*!
 		 * returns the name of the gate
@@ -382,12 +382,12 @@ namespace ds_structural {
 			}
 		}
 	};
-
 	/*!
 	 * a netlist is a gate which may contain another gates and holds signals connecting ports.
 	 * A netlist constructs an equivalent leveled graph for simulation
 	 */
 	class NetList : public Gate{
+		friend NetList* load_netlist(const std::string& file);
 		friend class ds_library::instance_visitor;
 	private:
 		const std::string DS_SIGNAL_PREFIX = "ds_"; //!< prefix for automatically generated signals
@@ -401,12 +401,11 @@ namespace ds_structural {
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
 			ar & boost::serialization::base_object<Gate>(*this);
+			ar & signals;
+			ar & signal_counter;
+			ar & own_signals;
 			ar & gates;
-		    ar & signals;
-		    ar & signal_counter;
-		    ar & own_signals;
 		    ar & assignment_map;
-		    ar & lg;
 		}
 		/*!
 		 * trace forward the receivers of a port and connect simulation primitives.
@@ -424,7 +423,6 @@ namespace ds_structural {
 		 */
 		void find_unused_gates(const PortBit *pb, std::vector<const Gate*> *unused);
 	public:
-
 		/*!
 		 * leveled graph pointer is null
 		 */
@@ -446,6 +444,14 @@ namespace ds_structural {
 		 */
 		void remove_gate(const Gate* g){
 			gates.erase(g->get_instance_name());
+			std::vector<PortBit*> ports;
+			ports.insert(ports.begin(), g->get_inputs()->begin(), g->get_inputs()->end());
+			ports.insert(ports.begin(), g->get_outputs()->begin(), g->get_outputs()->end());
+			for (auto it=ports.begin();it!=ports.end();it++){
+				PortBit* pb = *it;
+				Signal *s = pb->get_signal();
+				s->remove_port(pb);
+			}
 		}
 		/*!
 		 * creates a new netlist with the same structure as this netlist. Useful to instantiate hierarchical designs
@@ -516,7 +522,6 @@ namespace ds_structural {
 		void add_assignment(std::string lhs, std::string rhs) {
 			assignment_map[lhs] = rhs;
 		}
-
 		/*!
 		 * finds all netlist output port bits reachable from the provided port bit
 		 * @param pb start of forward trace
@@ -560,7 +565,6 @@ namespace ds_structural {
 			}
 
 		}
-
 		/*!
 		 * performs various sanity checks to verify the integrity of the netlist
 		 * @return true if check is successful
@@ -582,10 +586,11 @@ namespace ds_structural {
 		 * @param driver simulation output
 		 */
 		void drive(PortBit*pb, ds_common::lg_v64 *driver);
-
 	};
 
+	void save_netlist(const std::string& file, ds_structural::NetList *nl);
 
+	NetList* load_netlist(const std::string& file);
 }
 
 #endif

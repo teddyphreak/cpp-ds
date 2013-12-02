@@ -11,31 +11,20 @@
 #include "ds_structural.h"
 #include "ds_workspace.h"
 
-using namespace ds_library;
-using namespace ds_structural;
-using namespace ds_workspace;
-
 void import_test::import_netlist(const std::string& name) {
 
-	LibraryFactory *factory = LibraryFactory::getInstance();
-	Library *defaultLib = factory->load_library();
+	ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
 	std::string path = d?d:"";
-	Workspace *wp = ds_workspace::Workspace::get_workspace();
-	wp->add_library(defaultLib);
 	ds_structural::NetList* nl = 0;
 	try {
 
 		std::string file = path + "/files/" + name;
-		std::cout << "... importing " << file << std::endl;
-		nl = ds_library::import(file, "top", wp);
-		nl->remove_floating_signals();
-		bool r = nl->remove_unused_gates();
-		while (r)
-			r = nl->remove_unused_gates();
+		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
+		nl = ds_workspace::load_netlist(file, "top");
 		BOOST_CHECK(nl->check_netlist());
 		ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
 		BOOST_CHECK(lg->sanity_check());
