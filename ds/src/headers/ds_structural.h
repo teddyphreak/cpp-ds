@@ -21,9 +21,6 @@
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
-
 
 namespace ds_lg {
 	class LGNode;
@@ -32,6 +29,10 @@ namespace ds_lg {
 
 namespace ds_library {
 	struct instance_visitor;
+}
+
+namespace ds_workspace {
+	class Workspace;
 }
 
 namespace ds_structural {
@@ -224,7 +225,7 @@ namespace ds_structural {
 	 * Each gate holds information to bind its ports to the inputs and outputs of a ds_lg::LGNode
 	 */
 	class Gate {
-		friend ds_structural::NetList* load_netlist(const std::string& file);
+		friend NetList* load_netlist(const std::string& file, ds_workspace::Workspace* wp);
 	protected:
 		std::string name; 			//!< gate name
 		std::string type; 			//!< gate type
@@ -387,7 +388,7 @@ namespace ds_structural {
 	 * A netlist constructs an equivalent leveled graph for simulation
 	 */
 	class NetList : public Gate{
-		friend NetList* load_netlist(const std::string& file);
+		friend NetList* load_netlist(const std::string& file, ds_workspace::Workspace* wp);
 		friend class ds_library::instance_visitor;
 	private:
 		const std::string DS_SIGNAL_PREFIX = "ds_"; //!< prefix for automatically generated signals
@@ -590,7 +591,7 @@ namespace ds_structural {
 
 	void save_netlist(const std::string& file, ds_structural::NetList *nl);
 
-	NetList* load_netlist(const std::string& file);
+	NetList* load_netlist(const std::string& file, ds_workspace::Workspace* wp);
 }
 
 #endif

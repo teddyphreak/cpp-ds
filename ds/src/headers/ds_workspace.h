@@ -83,6 +83,18 @@ namespace ds_workspace {
 			return g;
 		}
 
+		ds_lg::LGNode* get_primitive(const std::string& name, std::size_t ports){
+			ds_lg::LGNode* n = 0;
+			for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
+				ds_library::Library *l = *lib_it;
+				n = l->get_primitive(name, ports);
+				if (n!=0)
+					break;
+				}
+
+			return n;
+		}
+
 		ds_library::LogicFunction get_function(const std::string& gate_type){
 			ds_library::LogicFunction v = ds_library::UNKNOWN;
 			for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){

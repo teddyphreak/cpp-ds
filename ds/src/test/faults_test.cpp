@@ -25,7 +25,7 @@ void faults_test::get_collapsed_faults(const std::string& name) {
 	try {
 
 		std::string file = path + "/files/" + name;
-		nl = ds_workspace::load_netlist(file, "top");
+		nl = ds_workspace::load_netlist("top",file);
 
 		BOOST_CHECK(nl->check_netlist());
 		ds_lg::LeveledGraph* lg = nl->build_leveled_graph();

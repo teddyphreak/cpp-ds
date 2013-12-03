@@ -4,13 +4,17 @@
  *  Created on: Sep 18, 2012
  *      Author: cookao
  */
+#include "ds_lg.h"
+#include "ds_library.h"
 #include "ds_structural.h"
+#include "ds_workspace.h"
+#include <queue>
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/lambda.hpp>
 #include <boost/foreach.hpp>
-#include "ds_lg.h"
-#include "ds_library.h"
-#include <queue>
+#include <boost/serialization/export.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 using ds_structural::Gate;
 using ds_structural::NetList;
@@ -715,14 +719,14 @@ void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<co
 
 void ds_structural::save_netlist(const std::string& file, ds_structural::NetList *nl){
 	std::ofstream ofs(file);
-	boost::archive::text_oarchive oa(ofs);
+	boost::archive::binary_oarchive oa(ofs);
 	oa << nl;
 }
 
-ds_structural::NetList* ds_structural::load_netlist(const std::string& file){
+ds_structural::NetList* ds_structural::load_netlist(const std::string& file, ds_workspace::Workspace *wp){
 	NetList *nl = 0;
 	std::ifstream ifs(file);
-	boost::archive::text_iarchive ia(ifs);
+	boost::archive::binary_iarchive ia(ifs);
 	ia >> nl;
 
 	//Fix gate memeber of PortBit
@@ -741,7 +745,11 @@ ds_structural::NetList* ds_structural::load_netlist(const std::string& file){
 		for (PortBit *pb: g->outputs){
 			pb->set_gate(g);
 		}
+		ds_lg::LGNode* lgn = wp->get_primitive(g->get_type(), g->get_num_ports());
+		g->set_lgn(lgn);
 	}
+
+
 
 
 	return nl;

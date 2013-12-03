@@ -11,6 +11,8 @@
 #include "ds_library.h"
 #include "ds_structural.h"
 #include "ds_workspace.h"
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 using namespace ds_library;
 using namespace ds_structural;
@@ -31,7 +33,7 @@ void serialization_test::serialize_paterns(const std::string& name) {
 
 	{
 		std::ofstream ofs(p_name);
-		boost::archive::text_oarchive oa(ofs);
+		boost::archive::binary_oarchive oa(ofs);
 		oa << p;
 	}
 
@@ -41,7 +43,7 @@ void serialization_test::serialize_paterns(const std::string& name) {
 	{
 
 		std::ifstream ifs(p_name);
-		boost::archive::text_iarchive ia(ifs);
+		boost::archive::binary_iarchive ia(ifs);
 		ia >> r;
 	}
 
@@ -76,25 +78,25 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	}
 	std::string path = d?d:"";
 	std::string file = path + "/files/" + name;
-	BOOST_LOG_TRIVIAL(info) << "... reading " << file;
-	ds_structural::NetList* n = ds_workspace::load_netlist(file, "top");
+	BOOST_LOG_TRIVIAL(info) << "Reading " << file;
+	ds_structural::NetList* n = ds_workspace::load_netlist("top", file);
 	BOOST_CHECK(n->check_netlist());
-	//ds_lg::LeveledGraph* lg = n->build_leveled_graph();
-	//BOOST_CHECK(lg->sanity_check());
+	ds_lg::LeveledGraph* lg = n->build_leveled_graph();
+	BOOST_CHECK(lg->sanity_check());
 
-	BOOST_LOG_TRIVIAL(info) << " Design :" << file << " imported";
-	std::string d_name = path + "/files/" + name + ".ds";
+	BOOST_LOG_TRIVIAL(info) << "Design :" << name << " imported";
+	std::string d_name = path + "/files/" + name + ".dsn";
 	ds_structural::save_netlist(d_name, n);
 
+	BOOST_LOG_TRIVIAL(info) << "Netlist dumped ";
 
-	BOOST_LOG_TRIVIAL(info) << "Netlist dumped... " << file;
+	ds_workspace::Workspace *wp = ds_workspace::Workspace::get_workspace();
+	ds_structural::NetList* r = ds_structural::load_netlist(d_name, wp);
 
-	ds_structural::NetList* r = ds_structural::load_netlist(d_name);
+	BOOST_LOG_TRIVIAL(info) << "Netlist read back ";;
 
-	BOOST_LOG_TRIVIAL(info) << "Netlist read back... " << file;
-
-	//BOOST_CHECK(r->check_netlist());
-	//ds_lg::LeveledGraph* r_lg = n->build_leveled_graph();
-	//BOOST_CHECK(r_lg->sanity_check());
+	BOOST_CHECK(r->check_netlist());
+	ds_lg::LeveledGraph* r_lg = n->build_leveled_graph();
+	BOOST_CHECK(r_lg->sanity_check());
 }
 

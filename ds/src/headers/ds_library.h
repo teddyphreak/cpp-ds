@@ -104,6 +104,27 @@ namespace ds_library {
 			return ds_library::UNKNOWN;
 	}
 
+	ds_lg::LGNode* get_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				ds_structural::Gate* gate = gate_it->second;
+				ds_lg::LGNode *n = gate->get_lgn();
+				ds_lg::LGNode *copy = n->clone();
+				return copy;
+			}
+		}
+		function_map::const_iterator func_it = functions.find(name);
+		if (func_it != functions.end()){
+			ds_lg::bi_eval func = func_it->second;
+			bool invert = inversion.find(name)->second;
+			ds_lg::LGNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
+			return n;
+		}
+		return 0;
+	}
+
 	/*!
 	 * retrieves a copy of the desired gate according to the prototype design pattern
 	 * @param name name of desired gate
