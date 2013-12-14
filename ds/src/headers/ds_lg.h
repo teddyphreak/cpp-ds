@@ -847,25 +847,36 @@ namespace ds_lg {
 		lg_v64 * d;		//!< data input
 		lg_v64 * cd;	//!< clk input
 		lg_v64 on;		//!< not Q output
+		lg_v64 * rst;
+		lg_v64 * rst_n;
+		lg_v64 * load;
+		lg_v64 * load_n;
+		lg_v64 one;
+		lg_v64 zero;
 	public:
+		LGState(const std::string& t):LGNode(t), one(-1L,0), zero(0,0){
+			endpoint = true;
+			rst = &zero;
+			rst_n = &one;
+			load = &zero;
+			load_n = &one;
+		}
 		/*!
 		 * update outputs when clk event is active
 		 */
-		virtual void sim() { /*TODO*/ }
+		virtual void sim() {
+			o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
+			on = ~o;
+		}
 		/*!
 		 * Simulation primitive state gates. Faults are injected
 		 */
-		virtual void hook() {/* TODO */ };
-		/*!
-		 * initializes node type. This gate is an endpoint.
-		 * @param t node type
-		 */
+		virtual void hook();
 		/*!
 		 * revert output to previous value
 		 */
 		virtual void rollback(){o = bo; on = ~bo;}
 		virtual void flip(){o = ~o; on = o;};
-		LGState(const std::string& t):LGNode(t){endpoint = true;};
 		/*!
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return

@@ -19,16 +19,16 @@
 boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 
 	boost::log::core::get()->set_filter(
-		boost::log::trivial::severity >= boost::log::trivial::trace
+		boost::log::trivial::severity >= boost::log::trivial::info
 	);
 
 	boost::unit_test::test_suite* test = BOOST_TEST_SUITE( "DSTest" );
 
-	serialization_test::serialize_ts *serial = new serialization_test::serialize_ts("serialize_ts");
-	test->add( serial );
+//	serialization_test::serialize_ts *serial = new serialization_test::serialize_ts("serialize_ts");
+//	test->add( serial );
 
-//	faults_test::faults_ts *faults = new faults_test::faults_ts("faults_ts");
-//	test->add( faults );
+	faults_test::faults_ts *faults = new faults_test::faults_ts("faults_ts");
+	test->add( faults );
 //
 //	sim_test::sim_ts *sim = new sim_test::sim_ts("sim_ts");
 //	test->add( sim );

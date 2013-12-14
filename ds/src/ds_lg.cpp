@@ -108,8 +108,12 @@ namespace ds_lg {
 	}
 
 	lg_v64** LGState::get_input(const std::string& name) {
-		if (name == "D")return &d;
-		if (name == "CD")return &cd;
+		if (name == "d")return &d;
+		if (name == "cd")return &cd;
+		if (name == "rst")return &rst;
+		if (name == "rst_n")return &rst_n;
+		if (name == "load")return &load;
+		if (name == "load_n")return &load_n;
 		return 0;
 	}
 
@@ -123,7 +127,6 @@ namespace ds_lg {
 		for (int i=0;i<disp;i++)
 			p++;
 		return p;
-
 	}
 
 	void Output::hook() {
@@ -386,6 +389,32 @@ namespace ds_lg {
 		}
 
 		return c;
+	}
+
+	void LGState::hook() {
+		lg_v64 *sd = d;
+		lg_v64 vd = *d;
+		d = &vd;
+		lg_v64 *srst = rst;
+		lg_v64 vrst = *rst;
+		rst = &vrst;
+		lg_v64 *srst_n = rst_n;
+		lg_v64 vrst_n = *rst_n;
+		rst_n = &vrst_n;
+		lg_v64 *sload = load;
+		lg_v64 vload = *load;
+		load = &vload;
+		lg_v64 *sload_n = load_n;
+		lg_v64 vload_n = *load_n;
+		load_n = &vload_n;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		d = sd;
+		rst = srst;
+		rst_n = srst_n;
+		load = sload;
+		load_n = sload_n;
 	}
 
 
