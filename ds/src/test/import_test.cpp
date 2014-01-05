@@ -26,7 +26,7 @@ void import_test::import_netlist(const std::string& name) {
 		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
 		nl = ds_workspace::load_netlist("top", file);
 		BOOST_CHECK(nl->check_netlist());
-		ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
+		ds_lg::LeveledGraph* lg = nl->get_sim_graph();
 		BOOST_CHECK(lg->sanity_check());
 		delete nl;
 

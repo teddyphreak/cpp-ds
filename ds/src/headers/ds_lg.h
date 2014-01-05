@@ -212,7 +212,7 @@ namespace ds_lg {
 		 * Derived classes implement this method to replicate the node's structure and behavior
 		 * @return a newly allocated node instance
 		 */
-		virtual LGNode* clone()=0;
+		virtual LGNode* clone() const=0;
 		/*!
 		 * Virtual destructor
 		 */
@@ -278,7 +278,7 @@ namespace ds_lg {
 		 */
 		void mark() {bo = o;}
 		/*!
-		 * queires the output value of the base simulation
+		 * queries the output value of the base simulation
 		 * @return
 		 */
 		lg_v64 get_mark() const {return bo;}
@@ -373,7 +373,7 @@ namespace ds_lg {
 		 * allocate new Output instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new Output();}
+		virtual Output* clone() const { return new Output();}
 		/*!
 		 * only one input port available
 		 * @param name output port name
@@ -422,7 +422,7 @@ namespace ds_lg {
 		 * allocate new Input instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new Input();}
+		virtual Input* clone() const { return new Input();}
 		/*!
 		 * no inputs in this node
 		 * @param name
@@ -473,7 +473,7 @@ namespace ds_lg {
 		 * allocate new LGNode1I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode1I(type, A);}
+		virtual LGNode* clone() const { return new LGNode1I(type, A);}
 		/*!
 		 * only one input port available
 		 * @param name port name
@@ -511,7 +511,7 @@ namespace ds_lg {
 		 * allocate new LGNode2I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode2I(type, A); }
+		virtual LGNode* clone() const { return new LGNode2I(type, A); }
 		/*!
 		 * two input ports available
 		 * @param name port name
@@ -559,7 +559,7 @@ namespace ds_lg {
 		 * allocate new LGNode3I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode3I(type, A); }
+		virtual LGNode* clone() const { return new LGNode3I(type, A); }
 		/*!
 		 * three input ports available
 		 * @param name port name
@@ -597,7 +597,7 @@ namespace ds_lg {
 		 * allocate new LGNode4I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode4I(type, A); }
+		virtual LGNode* clone() const { return new LGNode4I(type, A); }
 		/*!
 		 * four input ports available
 		 * @param name port name
@@ -636,7 +636,7 @@ namespace ds_lg {
 		 * allocate new LGNode5I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode5I(type, A); }
+		virtual LGNode* clone() const { return new LGNode5I(type, A); }
 		/*!
 		 * five input ports available
 		 * @param name port name
@@ -688,7 +688,7 @@ namespace ds_lg {
 		 * allocate new LGNode6I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode6I(type, A); }
+		virtual LGNode* clone() const { return new LGNode6I(type, A); }
 		/*!
 		 * six input ports available
 		 * @param name port name
@@ -729,7 +729,7 @@ namespace ds_lg {
 		 * allocate new LGNode7I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode7I(type, A); }
+		virtual LGNode* clone() const { return new LGNode7I(type, A); }
 		/*!
 		 * seven input ports available
 		 * @param name port name
@@ -771,7 +771,7 @@ namespace ds_lg {
 		 * allocate new LGNode8I instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNode8I(type, A); }
+		virtual LGNode* clone() const { return new LGNode8I(type, A); }
 		/*!
 		 * eight input ports available
 		 * @param name port name
@@ -819,7 +819,7 @@ namespace ds_lg {
 		 * allocate new LGNodeArr instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGNodeArr(type, input_size, A, invert); }
+		virtual LGNode* clone() const { return new LGNodeArr(type, input_size, A, invert); }
 		/*!
 		 * returns an output primitive value. Variable-input gates are usually instantiated implicitly. To allow the most inputs without ambiguity, the output name is 'z'
 		 * @param name output port name
@@ -881,7 +881,7 @@ namespace ds_lg {
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LGNode* clone() { return new LGState(type); }
+		virtual LGNode* clone() const { return new LGState(type); }
 		/*!
 		 * returns an output primitive value, either Q or QN
 		 * @param name output port name
@@ -907,15 +907,97 @@ namespace ds_lg {
 		 */
 		virtual ~LGState(){};
 	};
+
 	typedef std::vector<LGNode*> lg_node_container;
 	typedef lg_node_container::iterator lg_node_iterator;
 	typedef std::vector<Input*> lg_input_container;
 	typedef std::vector<Output*> lg_output_container;
 	typedef std::list<ds_faults::SimulationHook*> hook_container;
 
-	class LeveledGraph {
+	/*!
+	 * Main interface for the creation of a leveled graph class. In order to transform a netlist into
+	 * any simulation construct, classes implementing this interface instantiate the necessary simulation objects and
+	 * populate class internals for book-keeping
+	 */
+	class LeveledGraphBuilder{
+	public:
+		/*!
+		 * Sets the parent netlist
+		 * @param netlist parent netlist
+		 */
+		virtual void set_netlist(ds_structural::NetList *netlist)=0;
+		/*!
+		 * Adds an ouput to this simulation construct
+		 * @param out output to include
+		 */
+		virtual void add_output(Output* out)=0;
+		/*!
+		 * Adds an input to this simulation construct
+		 * @param in input to include
+		 */
+		virtual void add_input(Input* in)=0;
+		/*!
+		 * Sets the maximum number of levels
+		 * @param l maximum level
+		 */
+		virtual void set_levels(const int& l)=0;
+		/*!
+		 * Sets up space to hold simulation constructs in the lth level (0<=l<maximum_level)
+		 * @param l level id
+		 */
+		virtual void create_simulation_level(const std::size_t& l)=0;
+		/*!
+		 * Convenience node to iterate over simulation nodes
+		 * @return iterator to the first node element
+		 */
+		virtual lg_node_iterator get_nodes_begin()=0;
+		/*!
+		 * Convenience node to iterate over simulation nodes
+		 * @return iterator to the last node element
+		 */
+		virtual lg_node_iterator get_nodes_end()=0;
+		/*!
+		 * Adds a new node iterator delimiting a simulation level
+		 * @param it iterator
+		 */
+		virtual void push_level_iterator(lg_node_iterator it)=0;
+		/*!
+		 * Searches for the first iterator pointing to a node with the specified depth
+		 * @param level level id (0<=level<maxomum_level)
+		 * @return iterator pointing to the first element of the specified level
+		 */
+		virtual lg_node_iterator get_level_iterator(const std::size_t& level)=0;
+		/*!
+		 * Pushes the width of a level in the leveled graph
+		 * @param width number of nodes in the level
+		 */
+		virtual void push_level_width(const std::size_t& width)=0;
+		/*!
+		 * Gets constant simulation construct for 0
+		 * @return constant 0
+		 */
+		virtual lg_v64* get_constant_0()=0;
+		/*!
+		 * Gets constant simulation construct for 1
+		 * @return constant 1
+		 */
+		virtual lg_v64* get_constant_1()=0;
+		/*!
+		 * Adds a new state node
+		 * @param r new state node to add
+		 */
+		virtual void add_register(LGNode* r)=0;
+		/*!
+		 * Adds new simulation node
+		 * @param n new node to add
+		 */
+		virtual void add_node(LGNode* n)=0;
+	};
 
-		friend class ds_structural::NetList;
+	/*!
+	 *
+	 */
+	class LeveledGraph : public LeveledGraphBuilder{
 
 	public:
 
@@ -925,9 +1007,45 @@ namespace ds_lg {
 		lg_node_container registers;	//!< all sequential elements
 		hook_container hooks;			//!< all active hooks
 
-		void add_node(LGNode* n){
+		virtual void set_netlist(ds_structural::NetList *netlist) {
+			nl = netlist;
+		}
+		virtual void set_levels(const int& l){
+			num_levels = l;
+		}
+		virtual void create_simulation_level(const std::size_t& levels){
+			for (std::size_t l=0;l<levels;l++){
+				simulation.push_back(new lg_node_container());
+			}
+		}
+		virtual lg_node_iterator get_nodes_begin(){
+			return nodes.begin();
+		}
+		virtual lg_node_iterator get_nodes_end(){
+			return nodes.end();
+		}
+		virtual void push_level_iterator(lg_node_iterator it){
+			levels.push_back(it);
+		}
+		virtual lg_node_iterator get_level_iterator(const std::size_t& level){
+			return levels[level];
+		}
+		virtual void push_level_width(const std::size_t& width){
+			level_width.push_back(width);
+		}
+		virtual lg_v64* get_constant_0(){
+			return &constant_0;
+		}
+		virtual lg_v64* get_constant_1(){
+			return &constant_1;
+		}
+		virtual void add_register(LGNode* r){
+			registers.push_back(r);
+		}
+		virtual void add_node(LGNode* n){
 			nodes.push_back(n);
 			registry[n->get_name()] = n;
+			n->set_leveled_graph(this);
 		}
 
 		/*!
@@ -1033,8 +1151,8 @@ namespace ds_lg {
 		lg_v64 constant_0 = lg_v64(0L,0L);
 		lg_v64 constant_1 = lg_v64(-1L,0L);
 		lg_v64 constant_X = lg_v64(0L,-1L);
-		ds_structural::NetList *nl;
-		std::map<std::string, LGNode*> registry;
+		ds_structural::NetList *nl;							//!< parent netlist
+		std::map<std::string, LGNode*> registry;			//!< node map indexed by node instance name
 		double iteration;
 	};
 }

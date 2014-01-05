@@ -81,7 +81,7 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	BOOST_LOG_TRIVIAL(info) << "Reading " << file;
 	ds_structural::NetList* n = ds_workspace::load_netlist("top", file);
 	BOOST_CHECK(n->check_netlist());
-	ds_lg::LeveledGraph* lg = n->build_leveled_graph();
+	ds_lg::LeveledGraph* lg = n->get_sim_graph();
 	BOOST_CHECK(lg->sanity_check());
 
 	BOOST_LOG_TRIVIAL(info) << "Design :" << name << " imported";
@@ -96,7 +96,7 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	BOOST_LOG_TRIVIAL(info) << "Netlist read back ";;
 
 	BOOST_CHECK(r->check_netlist());
-	ds_lg::LeveledGraph* r_lg = n->build_leveled_graph();
+	ds_lg::LeveledGraph* r_lg = n->get_sim_graph();
 	BOOST_CHECK(r_lg->sanity_check());
 }
 

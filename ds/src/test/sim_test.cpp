@@ -34,7 +34,7 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, true);
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
-	ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
+	ds_lg::LeveledGraph* lg = nl->get_sim_graph();
 	BOOST_LOG_TRIVIAL(debug) << "Calculating fault set...";
 	ds_faults::FaultList fl(nl);
 	int total_blocks = provider->num_blocks();
@@ -57,7 +57,7 @@ void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_fil
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, false);
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
-	ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
+	ds_lg::LeveledGraph* lg = nl->get_sim_graph();
 	lg->adapt(provider);
 
 	while (provider->has_next()){

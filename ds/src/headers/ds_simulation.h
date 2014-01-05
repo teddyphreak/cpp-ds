@@ -8,7 +8,7 @@
 #ifndef DS_SIMULATION_H_
 #define DS_SIMULATION_H_
 
-#include<set>
+#include <set>
 #include "ds_lg.h"
 #include "ds_faults.h"
 #include <boost/log/trivial.hpp>

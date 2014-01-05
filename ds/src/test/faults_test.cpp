@@ -26,9 +26,9 @@ void faults_test::get_collapsed_faults(const std::string& name) {
 
 		std::string file = path + "/files/" + name;
 		nl = ds_workspace::load_netlist("top",file);
-
 		BOOST_CHECK(nl->check_netlist());
-		ds_lg::LeveledGraph* lg = nl->build_leveled_graph();
+
+		ds_lg::LeveledGraph* lg = nl->get_sim_graph();
 		BOOST_CHECK(lg->sanity_check());
 
 		std::map<ds_faults::SAFaultDescriptor*, std::list<ds_faults::SAFaultDescriptor*>* > *fault_classes = 0;

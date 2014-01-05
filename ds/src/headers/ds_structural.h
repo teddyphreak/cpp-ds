@@ -25,6 +25,9 @@
 namespace ds_lg {
 	class LGNode;
 	class LeveledGraph;
+	class LeveledGraphBuilder;
+	class Input;
+	class Output;
 }
 
 namespace ds_library {
@@ -506,15 +509,24 @@ namespace ds_structural {
 			return s;
 		}
 		/*!
-		 * constructs an equivalent leveled graph for simulation
+		 * constructs an equivalent leveled graph for zero-delay simulation
 		 * @return
 		 */
-		ds_lg::LeveledGraph* build_leveled_graph();
+		ds_lg::LeveledGraph* get_sim_graph();
 		/*!
-		 * detaches the current leveled graph and allocates another leveles graph instance
+		 * detaches the current leveled graph and allocates another leveled graph instance
 		 * @return
 		 */
-		ds_lg::LeveledGraph* clone_leveled_graph();
+		ds_lg::LeveledGraph* clone_sim_graph();
+		/*!
+		 * constructs a leveled graph. It makes use of the ds_lg::LeveledGraphBuilder to build the graph incrementally.
+		 * @param builder resulting leveled graph
+		 * @param node_map Node map for easy lookup between gates and simulation nodes
+		 * @param input_prototype simulation input nodes are cloned from this instance
+		 * @param output_prototype simulation outputs nodes are cloned from this interface
+		 */
+		void build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*,ds_lg::LGNode*>& node_map,
+				const ds_lg::Input& input_prototype, const ds_lg::Output& output_prototype);
 		/*!
 		 * adds an assignment to the circuit representation ('<=' in vhdl or 'assign' in verilog)
 		 * @param lhs left hand side of assignment

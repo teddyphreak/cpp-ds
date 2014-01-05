@@ -88,7 +88,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 
 		BOOST_LOG_TRIVIAL(trace) << "Pattern block " << (c++);
 
-		//evealuate each check point
+		//evaluate each check point
 		for (auto it=ordered_check_points.begin();it!=ordered_check_points.end();it++){
 
 			LGNode *cp = *it;
