@@ -20,8 +20,7 @@ namespace pattern_test {
 	{
 		pattern_ts(const std::string& name):boost::unit_test::test_suite(name)
 		{
-			files_to_test.push_back( "p100k.det.wgl" );
-
+			files_to_test.push_back( "p45k.wgl" );
 	        add( BOOST_PARAM_TEST_CASE( &wgl_import_test, files_to_test.begin(), files_to_test.end() ) );
 
 		}

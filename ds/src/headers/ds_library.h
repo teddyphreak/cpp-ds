@@ -57,7 +57,9 @@ namespace ds_library {
 	typedef std::map<std::string, bool> inversion_map;
 	typedef std::map<std::string, std::string> fusion_map;
 	typedef std::map<std::string, ds_structural::Gate*> gate_map_t;
-	typedef std::map<std::string, ds_lg::LGNode*> lgn_map_t;
+	typedef std::map<std::string, std::string> prototype_map_t;
+	typedef std::map<std::string, ds_lg::LogicNode*> lgn_map_t;
+	typedef std::map<ds_structural::Gate*, ds_lg::LogicNode*> node_map_t;
 	typedef std::map<std::string, ds_library::LogicFunction> type_map_t;
 
 	const std::string value_0 = "0";	//!< constant '0'
@@ -104,14 +106,14 @@ namespace ds_library {
 			return ds_library::UNKNOWN;
 	}
 
-	ds_lg::LGNode* get_primitive(const std::string& name, const std::size_t ports){
+	ds_lg::LogicNode* get_primitive(const std::string& name, const std::size_t ports){
 		gate_map_t::const_iterator gate_it = gate_map.find(name);
 		if (gate_it != gate_map.end()){
 			ds_structural::Gate *c = gate_it->second;
 			if (c->get_num_ports() == ports){
-				ds_structural::Gate* gate = gate_it->second;
-				ds_lg::LGNode *n = gate->get_lgn();
-				ds_lg::LGNode *copy = n->clone();
+				std::string lgn_name = prototype_map[name];
+				ds_lg::LogicNode *n = prototypes[lgn_name];
+				ds_lg::LogicNode *copy = n->clone();
 				return copy;
 			}
 		}
@@ -119,7 +121,7 @@ namespace ds_library {
 		if (func_it != functions.end()){
 			ds_lg::bi_eval func = func_it->second;
 			bool invert = inversion.find(name)->second;
-			ds_lg::LGNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
+			ds_lg::LogicNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
 			return n;
 		}
 		return 0;
@@ -142,8 +144,8 @@ namespace ds_library {
 		if (g==0) {
 			function_map::const_iterator it = functions.find(name);
 			if (it != functions.end()){
-				ds_lg::bi_eval func = it->second;
-				bool invert = inversion.find(name)->second;
+				//ds_lg::bi_eval func = it->second;
+				//bool invert = inversion.find(name)->second;
 				g = new ds_structural::Gate();
 				g->set_type(name);
 				ds_structural::PortBit *o_port = new ds_structural::PortBit("Z", ds_structural::DIR_OUT);
@@ -162,8 +164,8 @@ namespace ds_library {
 					g->add_mapping(port_name, lgn_port_name);
 					lgn_port++;
 				}
-				ds_lg::LGNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
-				g->set_lgn(n);
+			//	ds_lg::LogicNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
+			//	g->set_lgn(n);
 			}
 		}
 		return g;
@@ -203,6 +205,8 @@ namespace ds_library {
 		type_map_t types;			//!< boolean logic implemented by each function
 		function_map functions;		//!< evaluation functions of 2 operands
 		inversion_map inversion;	//!< true when the function entry is to be complemented
+		prototype_map_t prototype_map; //!<maps gate names to prototype names
+
 
 		/*!
 		 * populates the gate container in this library.
@@ -543,7 +547,7 @@ namespace ds_library {
 	 * @return true if line was successfully parsed
 	 */
 	template <typename Iterator>
-	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, type_map_t types, function_map& functions, inversion_map& inversion){
+	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, type_map_t types, function_map& functions, inversion_map& inversion, prototype_map_t& prototype_map){
 
 		parse_lib_node n;
 		lib_parser<Iterator> p;
@@ -576,8 +580,6 @@ namespace ds_library {
 				// create new gate and setup ports and mappings
 				Gate *g = new Gate();
 				g->set_type(n.gate_name);
-				ds_lg::LGNode *proto = iterator->second;
-				g->set_lgn(proto->clone());
 				for (fusion_map::const_iterator it = n.i_mapping.begin(); it!=n.i_mapping.end();it++){
 					string pb_name = it->first;
 					string lgn_name = it->second;
@@ -592,6 +594,9 @@ namespace ds_library {
 					g->add_port(p);
 					g->add_mapping(pb_name, lgn_name);
 				}
+
+				//match gate name with prototype name
+				prototype_map[n.gate_name] = n.node_name;
 
 				// register gate in the library
 				gates[n.gate_name] = g;
@@ -785,7 +790,7 @@ namespace ds_library {
 
 	bool parse_verilog(const std::string& name, std::vector<parse_netlist>& netlists);
 
-	void load_default_lib();
+	Library* load_default_lib();
 
 }
 

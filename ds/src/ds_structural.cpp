@@ -31,7 +31,6 @@ ds_structural::PortBit::~PortBit(){
 void ds_structural::Gate::copy(ds_structural::Gate* g){
 	g->set_instance_name(name);
 	g->set_type(type);
-	g->set_lgn(lgn->clone());
 	for (port_container::iterator it=inputs.begin();it!=inputs.end();it++){
 		PortBit *pb = *it;
 		PortBit *c = new PortBit(pb->get_instance_name(), g, pb->get_type());
@@ -243,25 +242,25 @@ std::string ds_structural::PortBit::get_qualified_name() const {
 	return g->get_instance_name() + "/" + get_instance_name();
 }
 
-ds_lg::LeveledGraph* ds_structural::NetList::clone_sim_graph(){
+//ds_lg::LeveledGraph* ds_structural::NetList::clone_sim_graph(){
+//
+//	if (lg==0)
+//		return 0;
+//
+//	lg = 0;
+//	for (auto gate_it = gates.begin();gate_it!=gates.end();gate_it++){
+//		Gate* g = gate_it->second;
+//		ds_lg::LogicNode* n = g->get_logic_node();
+//		g->set_lgn(n->clone());
+//	}
+//	return get_sim_graph();
+//}
 
-	if (lg==0)
-		return 0;
-
-	lg = 0;
-	for (auto gate_it = gates.begin();gate_it!=gates.end();gate_it++){
-		Gate* g = gate_it->second;
-		ds_lg::LGNode* n = g->get_lgn();
-		g->set_lgn(n->clone());
-	}
-	return get_sim_graph();
-}
-
-ds_lg::LeveledGraph* ds_structural::NetList::get_sim_graph(){
-	std::map<Gate*,ds_lg::LGNode*> node_map;
+ds_lg::LeveledGraph* ds_structural::NetList::get_sim_graph(ds_library::Library *lib){
+	std::map<Gate*,ds_lg::LogicNode*> node_map;
 	for (auto it=gates.begin();it!=gates.end();it++){
 		Gate *g = it->second;
-		ds_lg::LGNode *n = g->get_lgn();
+		ds_lg::LogicNode *n = lib->get_primitive(g->get_type(), g->get_num_ports());
 		node_map[g] = n;
 	}
 	ds_lg::LeveledGraph *lg = new ds_lg::LeveledGraph();
@@ -275,7 +274,8 @@ ds_lg::LeveledGraph* ds_structural::NetList::get_sim_graph(){
 	return lg;
 }
 
-void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*,ds_lg::LGNode*>& node_map,
+template<class V>
+void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*,V*>& node_map,
 		const ds_lg::Input& input_prototype, const ds_lg::Output& output_prototype){
 
 	using ds_lg::LGNode;
@@ -287,10 +287,9 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	std::vector<Gate*> state_gates;
 	std::stack<Gate*> todo;
 
-
 	for (auto gate_it = node_map.begin();gate_it!=node_map.end();gate_it++){
 		Gate *g = gate_it->first;
-		LGNode *n = gate_it->second;
+		V *n = gate_it->second;
 		n->set_gate(g);					// hook every LGN to its corresponding gate
 		if (n->has_state()){
 			state_gates.push_back(g);
@@ -300,9 +299,9 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	}
 
 	std::map<std::string, Gate*> trace;
-	std::list<LGNode*> level_list;
+	std::list<V*> level_list;
 
-	std::vector<LGNode*> lg_outputs;
+	std::vector<V*> lg_outputs;
 	for (ds_structural::PortBit* pb: outputs)
 	{
 		ds_lg::Output *out = output_prototype.clone();	// create output
@@ -315,7 +314,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 		for (ds_structural::sp_container::const_iterator pi=s->port_begin();pi!=s->port_end();pi++){
 			PortBit *d = *pi;
 			if (d->get_type() == ds_structural::DIR_OUT && d!=pb){
-				LGNode *driverNode = d->get_gate()->get_lgn();	// locate LGN of driving gate
+				V *driverNode = node_map[d->get_gate()];	// locate LGN of driving gate
 				out->inputs.push_back(driverNode);				// update LGN's inputs and outputs
 				driverNode->outputs.push_back(out);
 				ds_lg::lg_v64** in = out->get_input("a");		//primitive inputs are 'a'
@@ -325,7 +324,8 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 			}
 		}
 	}
-	std::vector<LGNode*> lg_inputs;
+
+	std::vector<V*> lg_inputs;
 	for (ds_structural::PortBit* pb: inputs)
 	{
 		ds_lg::Input *in = input_prototype.clone();				// create input
@@ -334,14 +334,15 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 		builder->add_input(in);
 		lg_inputs.push_back(in);
 		in->level = 0;										// inputs have depth 0
+		V* t = in;
 		ds_lg::lg_v64 *driver = in->get_output("o");		//primitive outputs are 'o'
-		trace_lg_forward(pb, in, driver, &trace, &todo);	//trace inputs forward
+		trace_lg_forward(pb, t, driver, &trace, &todo, node_map);	//trace inputs forward
 		Signal *s = pb->get_signal();
 		if (s!=0) {
 			for (auto pi=s->port_begin();pi!=s->port_end();pi++){	// setup input and output nodes
 				PortBit *pb = *pi;
 				if (pb->get_type() == ds_structural::DIR_IN){
-					ds_lg::LGNode* receiver = pb->get_gate()->get_lgn();
+					V* receiver = node_map[pb->get_gate()];
 					if (receiver!=0){
 						in->outputs.push_back(receiver);
 						receiver->inputs.push_back(in);
@@ -354,37 +355,37 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	while (!todo.empty()){
 		Gate *g = todo.top();
 		todo.pop();
-		LGNode *lgn = node_map[g];
+		V* lgn = node_map[g];
 		for (auto pi=g->get_outputs()->begin();pi!=g->get_outputs()->end();pi++){
 			PortBit *pb = *pi;
 			std::string port_name = g->get_mapping(pb->get_instance_name());
 			ds_lg::lg_v64 *driver = lgn->get_output(port_name);
-			trace_lg_forward(pb, lgn, driver, &trace, &todo);
+			trace_lg_forward(pb, lgn, driver, &trace, &todo, node_map);
 		}
 	}
 
 	// include state inputs in level list
 	for (ds_structural::Gate *g: state_gates)
 	{
-		LGNode *lgn = node_map[g];
-		for (ds_lg::LGNode *in: lgn->inputs)
+		V* lgn = node_map[g];
+		for (V* in: lgn->inputs)
 		{
 			if (!in->has_state())
 				level_list.push_back(in);
 		}
 	}
 	// level gates: push them onto stack till a levelized node is found. Then calculate the levels for the nodes in between
-	for (ds_lg::LGNode *lgn: level_list)
+	for (V *lgn: level_list)
 	{
-		std::stack<LGNode*> st;
+		std::stack<V*> st;
 		st.push(lgn);
 		while (!st.empty()){
 
-			LGNode *t = st.top();
+			V *t = st.top();
 
 			int max_level = 0;
 			std::size_t stack_size = st.size();
-			for (ds_lg::LGNode *in: t->inputs)
+			for (V *in: t->inputs)
 			{
 				if (in->level < 0){
 					st.push(in);
@@ -403,7 +404,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 
 	//calculate max level
 	int max_level = 0;
-	for (ds_lg::LGNode* out:lg_outputs){
+	for (V* out:lg_outputs){
 		if (out->level > max_level){
 			max_level = out->level;
 		}
@@ -411,21 +412,21 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	builder->set_levels(max_level + 1);
 
 	// build level map and fill level map with inputs and outputs
-	std::map<int, std::set<LGNode*>* > level_map;
+	std::map<int, std::set<V*>* > level_map;
 	for (int i=0;i<max_level+1;i++){
-		level_map[i] = new std::set<LGNode*>();
+		level_map[i] = new std::set<V*>();
 	}
-	for (ds_lg::LGNode *in: lg_inputs)
+	for (V *in: lg_inputs)
 	{
 		level_map[in->level]->insert(in);
 	}
-	for (ds_lg::LGNode *out: lg_outputs)
+	for (V *out: lg_outputs)
 	{
 		level_map[out->level]->insert(out);
 	}
 	// fill level map with traced nodes
 	for (std::map<std::string, Gate*>::iterator gi = trace.begin(); gi!=trace.end();gi++){
-		LGNode *lgn = node_map[gi->second];
+		V *lgn = node_map[gi->second];
 		if (lgn->level > 0) {
 			level_map[lgn->level]->insert(lgn);
 
@@ -433,17 +434,17 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	}
 	// add nodes in level order to the nodes container
 	for (int i=0;i<max_level+1;i++){
-		std::set<LGNode*> *set = level_map[i];
-		std::set<LGNode*>::iterator it = set->begin();
+		std::set<V*> *set = level_map[i];
+		typename std::set<V*>::iterator it = set->begin();
 		for (;it!=set->end();it++){
-			LGNode *n = *it;
+			V *n = *it;
 			builder->add_node(n);
 		}
 		delete set;
 	}
 	for  (int i=0;i<max_level+1;i++){
 		ds_lg::lg_node_container::iterator it = std::find_if(builder->get_nodes_begin(), builder->get_nodes_end(),
-				[&] (const LGNode* n) { return n->level == i;});
+				[&] (const V* n) { return n->level == i;});
 		builder->push_level_iterator(it);
 	}
 
@@ -471,7 +472,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	Signal *s0 = find_signal(ds_library::value_0);
 	if (s0!=0){
 		for (auto pi=s0->port_begin();pi!=s0->port_end();pi++){
-			drive(*pi, builder->get_constant_0());
+			drive<V>(*pi, builder->get_constant_0(), node_map);
 		}
 
 	}
@@ -479,32 +480,34 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	Signal *s1 = find_signal(ds_library::value_1);
 	if (s1!=0){
 		for (auto pi=s1->port_begin();pi!=s1->port_end();pi++){
-			drive(*pi, builder->get_constant_1());
+			drive<V>(*pi, builder->get_constant_1(), node_map);
 		}
 	}
 	//identify state elements
 	for (auto it = builder->get_nodes_begin();it!=builder->get_nodes_end();it++){
-		LGNode *n = *it;
+		V *n = *it;
 		if (n->has_state())
 			builder->add_register(n);
 	}
 
 }
 
-void ds_structural::NetList::drive(PortBit*pb, ds_lg::lg_v64 *driver){
+template <class V, class T>
+void ds_structural::NetList::drive(PortBit*pb, T *driver, std::map<Gate*,V*>& node_map){
 
 	// get receiver simulation node
 	Gate *g = pb->get_gate();
 	std::string m = g->get_mapping(pb->get_instance_name());
-	ds_lg::LGNode *target = g->get_lgn();
+	V *target = node_map[g];
 	// get the simulation input
 	ds_lg::lg_v64** rec = target->get_input(m);
 	// connect input to output
 	*rec = driver;
 }
 
-void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port_bit, ds_lg::LGNode* node,
-		ds_lg::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo){
+template <class V, class T>
+void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port_bit, V* node,
+		T *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo, std::map<Gate*,V*>& node_map){
 
 	using ds_lg::LGNode;
 	using ds_structural::PortBit;
@@ -524,11 +527,11 @@ void ds_structural::NetList::trace_lg_forward(const ds_structural::PortBit *port
 		if (pb->get_type() == ds_structural::DIR_IN && pb != port_bit){
 
 			//connect simulation output to input
-			drive(pb, driver);
+			drive<V>(pb, driver, node_map);
 
 			// if receiver gate has not been traced, schedule it for tracing
 			Gate *g = pb->get_gate();
-			ds_lg::LGNode *target = g->get_lgn();
+			V *target = node_map[g];
 			auto ti = trace->find(g->get_instance_name());
 			if (ti==trace->end()){
 				todo->push(g);
@@ -747,8 +750,8 @@ ds_structural::NetList* ds_structural::load_netlist(const std::string& file, ds_
 		for (PortBit *pb: g->outputs){
 			pb->set_gate(g);
 		}
-		ds_lg::LGNode* lgn = wp->get_primitive(g->get_type(), g->get_num_ports());
-		g->set_lgn(lgn);
+		//ds_lg::LogicNode* lgn = wp->get_primitive(g->get_type(), g->get_num_ports());
+		//g->set_lgn(lgn);
 	}
 
 

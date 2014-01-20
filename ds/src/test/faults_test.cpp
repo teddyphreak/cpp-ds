@@ -20,7 +20,7 @@ void faults_test::get_collapsed_faults(const std::string& name) {
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
 	std::string path = d?d:"";
-	ds_library::load_default_lib();
+	ds_library::Library* lib = ds_library::load_default_lib();
 	ds_structural::NetList* nl = 0;
 	try {
 
@@ -28,7 +28,9 @@ void faults_test::get_collapsed_faults(const std::string& name) {
 		nl = ds_workspace::load_netlist("top",file);
 		BOOST_CHECK(nl->check_netlist());
 
-		ds_lg::LeveledGraph* lg = nl->get_sim_graph();
+		std::cout << "netlist" << file << std::endl;
+
+		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 		BOOST_CHECK(lg->sanity_check());
 
 		std::map<ds_faults::SAFaultDescriptor*, std::list<ds_faults::SAFaultDescriptor*>* > *fault_classes = 0;

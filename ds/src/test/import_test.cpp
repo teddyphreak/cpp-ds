@@ -13,7 +13,7 @@
 
 void import_test::import_netlist(const std::string& name) {
 
-	ds_library::load_default_lib();
+	ds_library::Library *lib = ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
@@ -26,7 +26,7 @@ void import_test::import_netlist(const std::string& name) {
 		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
 		nl = ds_workspace::load_netlist("top", file);
 		BOOST_CHECK(nl->check_netlist());
-		ds_lg::LeveledGraph* lg = nl->get_sim_graph();
+		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 		BOOST_CHECK(lg->sanity_check());
 		delete nl;
 

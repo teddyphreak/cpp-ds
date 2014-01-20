@@ -10,7 +10,7 @@
 #include <boost/log/trivial.hpp>
 
 using ds_faults::SAFaultDescriptor;
-using ds_lg::LGNode;
+using ds_lg::LogicNode;
 
 void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::FaultList* fl, ds_pattern::CombinationalPatternProvider* provider){
 	//adapt pattern provider to leveled graph
@@ -22,17 +22,17 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 
 	//the check points are inputs, outputs or fanount nodes. The values of the map are the faults dominated by
 	//the corresponding check point
-	std::map<LGNode*, std::set<ds_faults::StuckAt*>* > check_points;
+	std::map<LogicNode*, std::set<ds_faults::StuckAt*>* > check_points;
 	std::map<ds_faults::StuckAt*, SAFaultDescriptor*> fault_map;
 	int total = 0;
 
 	for (SAFaultDescriptor* d:fault_set){
 
-		LGNode *node = lg->get_node(d->gate_name);
+		LogicNode *node = lg->get_node(d->gate_name);
 		if (node==0)
 			node = lg->get_node(d->port_name);
 
-		LGNode *cp = lg->get_check_point(node);
+		LogicNode *cp = lg->get_check_point(node);
 
 		auto it = check_points.find(cp);
 		std::set<ds_faults::StuckAt*>* faults = 0;
@@ -49,20 +49,20 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 	}
 
 	// order check points: for now irrelevant
-	std::vector<LGNode*> ordered_check_points;
+	std::vector<LogicNode*> ordered_check_points;
 	for (auto it=check_points.begin();it!=check_points.end();it++){
 		ordered_check_points.push_back(it->first);
 	}
-	std::sort(ordered_check_points.begin(), ordered_check_points.end(), [] (const LGNode* n1, const LGNode* n2) { return (n1->level > n2->level); });
+	std::sort(ordered_check_points.begin(), ordered_check_points.end(), [] (const LogicNode* n1, const LogicNode* n2) { return (n1->level > n2->level); });
 
 	//error info
 	ds_common::int64 detected;
 	ds_common::int64 possibly_detected;
 
 	//attach observers to the outputs so an error can be identified
-	std::map<LGNode*, ds_simulation::ErrorObserver*> output_map;
+	std::map<LogicNode*, ds_simulation::ErrorObserver*> output_map;
 	for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
-		LGNode *o = *it;
+		LogicNode *o = *it;
 		ds_simulation::ErrorObserver *observer = new ds_simulation::ErrorObserver(&detected, &possibly_detected);
 		output_map[o] = observer;
 		o->add_monitor(observer);
@@ -78,7 +78,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 		lg->sim(block);
 		//set the expected value in the observers
 		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
-			LGNode *output = *it;
+			LogicNode *output = *it;
 			ds_simulation::ErrorObserver *observer = output_map[output];
 			observer->set_spec(output->peek());
 		}
@@ -91,7 +91,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 		//evaluate each check point
 		for (auto it=ordered_check_points.begin();it!=ordered_check_points.end();it++){
 
-			LGNode *cp = *it;
+			LogicNode *cp = *it;
 
 			//reset the error info
 			detected=0;
@@ -107,14 +107,17 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 			//flip the fault-free value and apply any monitors (required for fanout nodes)
 			cp->flip_and_observe();
 			//queue all check point outputs for intermediate simulation
-			for (LGNode* o:cp->outputs){
+			for (LogicNode* o:cp->outputs){
 				lg->push_node(o);
 			}
+
+			BOOST_LOG_TRIVIAL(trace) << "1";
 			//intermediate simulation
 			lg->sim_intermediate();
+			BOOST_LOG_TRIVIAL(trace) << "2";
 			//reset check point to fault-free state
 			cp->rollback();
-
+			BOOST_LOG_TRIVIAL(trace) << "3";
 			// save the error information (it could be indirectly modified later)
 			ds_common::int64 a = detected & mask;
 			ds_common::int64 b = possibly_detected & mask;
@@ -126,7 +129,9 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 					ds_faults::StuckAt *f = *f_it;
 					ds_faults::SAFaultDescriptor* d = fault_map[f];
 					//propagate fault to check point
+					BOOST_LOG_TRIVIAL(trace) << "4";
 					ds_common::int64 obs = lg->propagate_to_check_point(f);
+					BOOST_LOG_TRIVIAL(trace) << "5";
 					//check if the fault is propagated AND an error is detected
 					if ((obs & a) !=0){
 						cp_faults->erase(f_it++);
@@ -137,6 +142,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 					}else {
 						++f_it;
 					}
+					BOOST_LOG_TRIVIAL(trace) << "6";
 				}
 			}
 		}
@@ -144,7 +150,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 	// delete allocated objects
 	for (auto it=output_map.begin();it!=output_map.end();it++){
 
-		LGNode *output = it->first;
+		LogicNode *output = it->first;
 		ds_simulation::ErrorObserver* observer = it->second;
 		output->remove_monitor(observer);
 		delete observer;

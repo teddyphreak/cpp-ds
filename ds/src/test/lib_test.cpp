@@ -61,7 +61,6 @@ void lib_test::lib_gate_query_test() {
 	ds_structural::Gate* g = defaultLib->get_gate("and4",5);
 	BOOST_ASSERT(g!=0);
 	BOOST_ASSERT(g->get_type()=="and4");
-	BOOST_ASSERT(g->get_lgn()!=0);
 	BOOST_ASSERT(g->get_num_ports()==5);
 	std::size_t inputs = 0;
 	for (auto it=g->get_inputs()->begin();it!=g->get_inputs()->end();it++){
@@ -80,7 +79,6 @@ void lib_test::lib_gate_query_test() {
 	g = defaultLib->get_gate("or",7);
 	BOOST_ASSERT(g!=0);
 	BOOST_ASSERT(g->get_type()=="or");
-	BOOST_ASSERT(g->get_lgn()!=0);
 	BOOST_ASSERT(g->get_num_ports()==7);
 	BOOST_ASSERT(g->get_inputs()->size()==6);
 	BOOST_ASSERT(g->get_outputs()->size()==1);

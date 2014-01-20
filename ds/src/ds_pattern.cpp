@@ -47,6 +47,7 @@ ds_pattern::CombinationalPatternProvider* ds_pattern::load_pattern_blocks(const 
 	ds_pattern::PatternList* pl = ds_pattern::parse_wgl(file, compact);
 	BOOST_LOG_TRIVIAL(trace) << "Total patterns: " << pl->get_pattern_count();
 	ds_pattern::CombinationalPatternProvider* pattern_blocks = new ds_pattern::CombinationalPatternProvider(*pl);
+	BOOST_LOG_TRIVIAL(trace) << "Total patterns: " << pattern_blocks->num_blocks();
 	delete pl;
 	return pattern_blocks;
 }

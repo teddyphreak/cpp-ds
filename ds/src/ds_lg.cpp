@@ -16,8 +16,8 @@
 
 namespace ds_lg {
 
-	void LGNode::hook_inputs(){
-		for (ds_faults::SimulationHook *h : hooks){
+	void LogicNode::hook_inputs(){
+		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
 			lg_v64** input_address = get_input(h->get_hook_port());
 			if (input_address!=0){
 				lg_v64* p_port = *input_address;
@@ -29,8 +29,8 @@ namespace ds_lg {
 		}
 	}
 
-	void LGNode::hook_outputs(){
-		for (ds_faults::SimulationHook *h : hooks){
+	void LogicNode::hook_outputs(){
+		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
 			lg_v64* p_port = get_output(h->get_hook_port());
 			if (p_port!=0){
 				int64 activation = h->hook(lg);
@@ -131,14 +131,14 @@ namespace ds_lg {
 
 	void Output::hook() {
 		sim();
-		for (ds_faults::SimulationHook *h : hooks){
+		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
 			o.v ^=  h->hook(lg) & ~o.x;
 		}
 	}
 
 	void Input::hook() {
 		sim();
-		for (ds_faults::SimulationHook *h : hooks){
+		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
 			o.v ^=  h->hook(lg) & ~o.x;
 		}
 	}
@@ -359,14 +359,14 @@ namespace ds_lg {
 			c = false;
 			std::cout << "no nodes found!"<< std::endl;
 		}
-		for (LGNode *n: nodes)
+		for (LogicNode *n: nodes)
 		{
 			if (n->level >= num_levels){
 				c = false;
 				std::cout << "> max level"<< std::endl;
 			}
 
-			for (LGNode *o: n->outputs)
+			for (ds_lg::LogicNode *o: n->outputs)
 			{
 				if (!o->has_state())
 					if (n->level >= o->level){
@@ -380,7 +380,7 @@ namespace ds_lg {
 		for (int i=0;i<num_levels;i++){
 			unsigned int cnt = 0;
 			std::for_each(nodes.begin(), nodes.end(),
-				[&] (LGNode* n) { if (n->level == i) cnt++;}
+				[&] (LogicNode* n) { if (n->level == i) cnt++;}
 			);
 			if (cnt != level_width[i]){
 				c = false;
@@ -444,27 +444,27 @@ namespace ds_lg {
 		pattern_block = pb;
 		//propagates events from in level order from inputs to outputs
 		for (auto it=nodes.begin();it!=nodes.end();it++){
-			LGNode *n = *it;
+			LogicNode *n = *it;
 			n->propagate(false);
 			n->mark();
 		}
 		//inject hooks
-		for (ds_faults::SimulationHook* h: hooks){
-			LGNode *node = h->get_hook_node(this);
+		for (ds_faults::SimulationHook<LogicNode>* h: hooks){
+			LogicNode *node = h->get_hook_node(this);
 			push_node(node);
 		}
 		sim_intermediate();
 	}
 
 	void LeveledGraph::sim_intermediate(){
-		std::set<LGNode*> set;
+		std::set<LogicNode*> set;
 		for (int i=0;i<num_levels;i++){
 			lg_node_container* level = simulation[i];
 			iteration++;
 			for (auto it=level->begin();it!=level->end();it++){
-				LGNode *n = *it;
+				LogicNode *n = *it;
 				if (n->propagate(true)){
-					for (LGNode *o : n->outputs){
+					for (ds_lg::LogicNode *o : n->outputs){
 						auto s = set.find(o);
 						if (s==set.end()){
 							push_node(o);
@@ -477,7 +477,7 @@ namespace ds_lg {
 		for (int i=0;i<num_levels;i++){
 			lg_node_container* level = simulation[i];
 			for (auto it=level->begin();it!=level->end();it++){
-				LGNode *n = *it;
+				LogicNode *n = *it;
 				n->rollback();
 			}
 			level->clear();
@@ -485,18 +485,21 @@ namespace ds_lg {
 
 	}
 
-	ds_common::int64 LeveledGraph::propagate_to_check_point(ds_faults::SimulationHook *h){
-		LGNode *n = h->get_hook_node(this);
+	ds_common::int64 LeveledGraph::propagate_to_check_point(ds_faults::SimulationHook<LogicNode> *h){
+		std::cout << "inside 1" << std::endl;
+		LogicNode *n = h->get_hook_node(this);
+		std::cout << "inside 2 " << n << std::endl;
 		n->add_hook(h);
-
-		LGNode* node = get_check_point(n);
+		std::cout << "inside 3" << std::endl;
+		LogicNode* node = get_check_point(n);
+		std::cout << "inside 4 " << node << std::endl;
 		lg_v64 ff = node->get_mark();
-
-		std::vector<LGNode*> path;
+		std::vector<LogicNode*> path;
 		path.push_back(n);
+		std::cout << "inside 5 " << n->get_type() << std::endl;
 		bool p = n->propagate(true);
 		n->remove_hook(h);
-
+		std::cout << "inside 6 " << std::endl;
 		if (p)
 			while (n!=node){
 				n = n->outputs[0];
@@ -504,22 +507,22 @@ namespace ds_lg {
 				if (!n->propagate(true))
 					break;
 			}
-
+		std::cout << "inside 7 " << std::endl;
 		lg_v64 faulty = n->peek();
-		for (LGNode *p:path){
+		for (LogicNode *p:path){
 			p->rollback();
 		}
-
+		std::cout << "inside 8 " << std::endl;
 		if (n!=node)
 			return 0;
 
 		ds_common::int64 result = ~ff.x & ~faulty.x & (ff.v ^ faulty.v);
-
+		std::cout << "inside out " << std::endl;
 		return result;
 	}
 
-	LGNode* LeveledGraph::get_check_point(LGNode* node){
-		LGNode *fo = node;
+	LogicNode* LeveledGraph::get_check_point(LogicNode* node){
+		LogicNode *fo = node;
 		if (fo->outputs.size()!=0){
 			while (fo->outputs.size()==1){
 				fo = fo->outputs[0];
@@ -528,9 +531,9 @@ namespace ds_lg {
 		return fo;
 	}
 
-	void LeveledGraph::add_hook(ds_faults::SimulationHook* hook){
+	void LeveledGraph::add_hook(ds_faults::SimulationHook<LogicNode>* hook){
 		hooks.push_back(hook);
-		LGNode *node = hook->get_hook_node(this);
+		LogicNode *node = hook->get_hook_node(this);
 		node->add_hook(hook);
 		push_node(node);
 	};
@@ -538,16 +541,16 @@ namespace ds_lg {
 
 	void LeveledGraph::clear_hooks(){
 		for (auto it=hooks.begin();it!=hooks.end();it++){
-			ds_faults::SimulationHook *hook = *it;
-			LGNode *node = hook->get_hook_node(this);
+			ds_faults::SimulationHook<LogicNode> *hook = *it;
+			LogicNode *node = hook->get_hook_node(this);
 			node->remove_hooks();
 		}
 		hooks.clear();
 	}
 
-	void LeveledGraph::clear_hook(ds_faults::SimulationHook* hook){
+	void LeveledGraph::clear_hook(ds_faults::SimulationHook<LogicNode>* hook){
 		hooks.remove(hook);
-		LGNode *node = hook->get_hook_node(this);
+		LogicNode *node = hook->get_hook_node(this);
 		node->remove_hook(hook);
 	};
 }

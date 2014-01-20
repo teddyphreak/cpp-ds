@@ -71,7 +71,7 @@ void serialization_test::serialize_paterns(const std::string& name) {
 }
 
 void serialization_test::serialize_netlist(const std::string& name) {
-	ds_library::load_default_lib();
+	ds_library::Library *lib = ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
@@ -81,7 +81,7 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	BOOST_LOG_TRIVIAL(info) << "Reading " << file;
 	ds_structural::NetList* n = ds_workspace::load_netlist("top", file);
 	BOOST_CHECK(n->check_netlist());
-	ds_lg::LeveledGraph* lg = n->get_sim_graph();
+	ds_lg::LeveledGraph* lg = n->get_sim_graph(lib);
 	BOOST_CHECK(lg->sanity_check());
 
 	BOOST_LOG_TRIVIAL(info) << "Design :" << name << " imported";
@@ -96,7 +96,7 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	BOOST_LOG_TRIVIAL(info) << "Netlist read back ";;
 
 	BOOST_CHECK(r->check_netlist());
-	ds_lg::LeveledGraph* r_lg = n->get_sim_graph();
+	ds_lg::LeveledGraph* r_lg = n->get_sim_graph(lib);
 	BOOST_CHECK(r_lg->sanity_check());
 }
 

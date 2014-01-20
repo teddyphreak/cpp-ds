@@ -23,7 +23,7 @@
 #include <boost/serialization/vector.hpp>
 
 namespace ds_lg {
-	class LGNode;
+	class LogicNode;
 	class LeveledGraph;
 	class LeveledGraphBuilder;
 	class Input;
@@ -32,6 +32,7 @@ namespace ds_lg {
 
 namespace ds_library {
 	struct instance_visitor;
+	class Library;
 }
 
 namespace ds_workspace {
@@ -235,7 +236,7 @@ namespace ds_structural {
 		port_container inputs;		//!< input ports
 		port_container outputs;		//!< output ports
 		function_map_t mappings;	//!< port mappings (Gate->LGNode)
-		ds_lg::LGNode* lgn;			//!< corresponding simulation LGNode
+		ds_lg::LogicNode* lgn;		//!< corresponding simulation LogicNode
 		Gate* parent;				//!< parent gate or netlist
 
 		/*!
@@ -258,7 +259,7 @@ namespace ds_structural {
 		/*!
 		 * gate constructor: produces and "empty" gate. All structural information must be provided
 		 */
-		Gate():name(),type(),lgn(0), parent(0){}
+		Gate():name(),type(),parent(0){}
 		/*!
 		 * sets the parent gate
 		 * @param p pointer to parent gate
@@ -313,14 +314,6 @@ namespace ds_structural {
 			}
 			return std::string("");
 		}
-		/*!
-		 * associates this gate to a simulation primitive
-		 */
-		void set_lgn(ds_lg::LGNode* n){lgn = n;}
-		/*!
-		 * returns the associated simulation primitive
-		 */
-		ds_lg::LGNode* get_lgn()const{return lgn;}
 		/*!
 		 * returns the number of ports (inputs + outputs)
 		 */
@@ -419,7 +412,9 @@ namespace ds_structural {
 		 * @param trace contains the gates traced so far (avoid infinite loops)
 		 * @param todo gates to trace in next iteration
 		 */
-		void trace_lg_forward(const PortBit* pb, ds_lg::LGNode *node, ds_common::lg_v64 *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo);
+		template <class V, class T>
+		void trace_lg_forward(const PortBit* pb, V *node, T *driver, std::map<std::string, Gate*> *trace, std::stack<Gate*> *todo,
+				 std::map<Gate*,V*>& node_map);
 		/*!
 		 * traces an input port backwards to find unused gates and deletes unconnected signals
 		 * @param pb input port to trace
@@ -512,12 +507,12 @@ namespace ds_structural {
 		 * constructs an equivalent leveled graph for zero-delay simulation
 		 * @return
 		 */
-		ds_lg::LeveledGraph* get_sim_graph();
+		ds_lg::LeveledGraph* get_sim_graph(ds_library::Library *lib);
 		/*!
 		 * detaches the current leveled graph and allocates another leveled graph instance
 		 * @return
 		 */
-		ds_lg::LeveledGraph* clone_sim_graph();
+		//ds_lg::LeveledGraph* clone_sim_graph();
 		/*!
 		 * constructs a leveled graph. It makes use of the ds_lg::LeveledGraphBuilder to build the graph incrementally.
 		 * @param builder resulting leveled graph
@@ -525,7 +520,8 @@ namespace ds_structural {
 		 * @param input_prototype simulation input nodes are cloned from this instance
 		 * @param output_prototype simulation outputs nodes are cloned from this interface
 		 */
-		void build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*,ds_lg::LGNode*>& node_map,
+		template<class V>
+		void build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*, V*>& node_map,
 				const ds_lg::Input& input_prototype, const ds_lg::Output& output_prototype);
 		/*!
 		 * adds an assignment to the circuit representation ('<=' in vhdl or 'assign' in verilog)
@@ -598,7 +594,8 @@ namespace ds_structural {
 		 * @param pb port input to drive
 		 * @param driver simulation output
 		 */
-		void drive(PortBit*pb, ds_common::lg_v64 *driver);
+		template <class V, class T>
+		void drive(PortBit*pb, T *driver, std::map<Gate*,V*>& node_map);
 	};
 
 	void save_netlist(const std::string& file, ds_structural::NetList *nl);

@@ -24,7 +24,7 @@ void sim_test::test_fc(){
 };
 
 void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
-	ds_library::load_default_lib();
+	ds_library::Library *lib = ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
@@ -34,7 +34,7 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, true);
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
-	ds_lg::LeveledGraph* lg = nl->get_sim_graph();
+	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 	BOOST_LOG_TRIVIAL(debug) << "Calculating fault set...";
 	ds_faults::FaultList fl(nl);
 	int total_blocks = provider->num_blocks();
@@ -50,14 +50,14 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 }
 
 void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_file, const std::string& top){
-	ds_library::load_default_lib();
+	ds_library::Library *lib = ds_library::load_default_lib();
 	const char* d = getenv("DS");
 	std::string path = d?d:"";
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, false);
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
-	ds_lg::LeveledGraph* lg = nl->get_sim_graph();
+	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 	lg->adapt(provider);
 
 	while (provider->has_next()){

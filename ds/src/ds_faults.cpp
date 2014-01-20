@@ -236,37 +236,6 @@ std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* ds_faults::get_fa
 	}
 	return universe;
 }
-
-ds_lg::lg_v64* ds_faults::resolve(const PinReference *pr, ds_lg::LeveledGraph *lg){
-	std::string name = pr->get_gate_name();
-	std::string port = pr->get_port_name();
-	ds_lg::LGNode *n = lg->get_node(name);
-	// try a gate first
-	if (n!=0){
-		ds_structural::NetList *nl = lg->get_netlist();
-		ds_structural::Gate *g = nl->find_gate(name);
-		std::string hook_port = g->get_mapping(port);
-		if (pr->is_input()){
-			ds_lg::lg_v64 *p = *n->get_input(hook_port);
-			return p;
-		}
-		if (pr->is_output()){
-			ds_lg::lg_v64 *p = n->get_output(hook_port);
-			return p;
-		}
-	} else {
-		// no gate found. Try a primiry input / output
-		n = lg->get_node(port);
-		if (pr->is_input()){
-			return n->get_output("o");		// only one port possible
-		}
-		if (pr->is_output()){
-			return *n->get_input("a");		// only one port possible
-		}
-	}
-	return 0;
-}
-
 std::set<SAFaultDescriptor*>* ds_faults::get_collapsed_faults(ds_structural::NetList* nl){
 	std::set<SAFaultDescriptor*>* collapsed = new std::set<SAFaultDescriptor*>();
 	//get all fault classes
@@ -280,7 +249,6 @@ std::set<SAFaultDescriptor*>* ds_faults::get_collapsed_faults(ds_structural::Net
 	ds_faults::delete_faults(universe);
 	return collapsed;
 }
-
 void ds_faults::delete_faults(std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* faults){
 	for (auto it=faults->begin();it!=faults->end();it++){
 		SAFaultDescriptor* eq_ptr = it->first;
@@ -293,7 +261,6 @@ void ds_faults::delete_faults(std::map<SAFaultDescriptor*, std::list<SAFaultDesc
 		delete(faults);
 	}
 }
-
 ds_faults::FaultList::FaultList(ds_structural::NetList* nl){
 	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* universe = ds_faults::get_fault_universe(nl);
 	for (auto it=universe->begin();it!=universe->end();it++){

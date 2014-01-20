@@ -30,8 +30,8 @@ void ds_library::Library::load_nodes(){
 
 	using namespace ds_lg;
 
-	std::list<LGNode*> list;
-	LGNode *node = new LGNode1I("not", f_not); types["not"] = ds_library::NOT;
+	std::list<LogicNode*> list;
+	LogicNode *node = new LGNode1I("not", f_not); types["not"] = ds_library::NOT;
 	list.push_back(node);
 	node = new LGNode1I("not1", f_not); types["not1"] = ds_library::NOT;
 	list.push_back(node);
@@ -150,9 +150,8 @@ void ds_library::Library::load_nodes(){
 	list.push_back(node);
 
 	// fill up prototype registry
-	typedef std::list<ds_lg::LGNode*>::iterator IT;
-	for (IT it=list.begin();it!=list.end();it++){
-		LGNode *n = *it;
+	for (auto it=list.begin();it!=list.end();it++){
+		LogicNode *n = *it;
 		prototypes[n->get_type()] = n;
 	}
 
@@ -190,7 +189,7 @@ void ds_library::Library::load(const std::string &lib_name){
 
 			std::getline(input ,line);
 			if (!line.empty()) {
-				bool p = parse_library<std::string::iterator>(line.begin(), line.end(), gate_map, prototypes, types, functions, inversion);
+				bool p = parse_library<std::string::iterator>(line.begin(), line.end(), gate_map, prototypes, types, functions, inversion, prototype_map);
 				if (!p){
 
 					boost::algorithm::trim(line);
@@ -210,10 +209,9 @@ void ds_library::Library::load(const std::string &lib_name){
 }
 
 void ds_library::Library::close(){
-	typedef std::map<std::string, ds_lg::LGNode*>::const_iterator IT;
-	for (IT it = prototypes.begin(); it!=prototypes.end();it++){
+	for (auto it = prototypes.begin(); it!=prototypes.end();it++){
 		std::string name = it->first;
-		ds_lg::LGNode* n = it->second;
+		ds_lg::LogicNode* n = it->second;
 		delete(n);
 	}
 	prototypes.clear();
@@ -286,7 +284,6 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 		netlist = ds_library::convert(*top, workspace);
 
 	} else {
-
 
 		std::set<dependency_type> to_evaluate;
 		to_evaluate.insert(dependency_v.dependencies.begin(), dependency_v.dependencies.end());
@@ -572,9 +569,10 @@ void ds_library::dependency_visitor::operator()(const ds_library::parse_nl_expli
 	//TODO
 }
 
-void ds_library::load_default_lib(){
+ds_library::Library* ds_library::load_default_lib(){
 	LibraryFactory *factory = LibraryFactory::getInstance();
 	Library *defaultLib = factory->load_library();
 	ds_workspace::Workspace *wp = ds_workspace::Workspace::get_workspace();
 	wp->add_library(defaultLib);
+	return defaultLib;
 }

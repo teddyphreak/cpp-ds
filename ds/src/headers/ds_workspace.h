@@ -83,8 +83,8 @@ namespace ds_workspace {
 			return g;
 		}
 
-		ds_lg::LGNode* get_primitive(const std::string& name, std::size_t ports){
-			ds_lg::LGNode* n = 0;
+		ds_lg::LogicNode* get_primitive(const std::string& name, std::size_t ports){
+			ds_lg::LogicNode* n = 0;
 			for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
 				ds_library::Library *l = *lib_it;
 				n = l->get_primitive(name, ports);

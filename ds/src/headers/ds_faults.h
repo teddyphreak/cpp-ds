@@ -54,15 +54,43 @@ public:
  * @return
  */
 
-ds_lg::lg_v64* resolve(const PinReference *pr, ds_lg::LeveledGraph *lg);
+template<class T>
+ds_lg::lg_v64* resolve(const PinReference *pr, ds_lg::Resolver<T> *res){
+	std::string name = pr->get_gate_name();
+	std::string port = pr->get_port_name();
+	ds_lg::LogicNode *n = res->get_node(name);
+	// try a gate first
+	if (n!=0){
+		std::string hook_port = res->get_port_name(name, port);
+		if (pr->is_input()){
+			ds_lg::lg_v64 *p = *n->get_input(hook_port);
+			return p;
+		}
+		if (pr->is_output()){
+			ds_lg::lg_v64 *p = n->get_output(hook_port);
+			return p;
+		}
+	} else {
+		// no gate found. Try a primary input / output
+		n = res->get_node(port);
+		if (pr->is_input()){
+			return n->get_output("o");		// only one port possible
+		}
+		if (pr->is_output()){
+			return *n->get_input("a");		// only one port possible
+		}
+	}
+	return 0;
+}
 
+template<class T>
 class SimulationHook{
 public:
 	/*!
 	 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
 	 * @return 1 in bit position i if fault is active in slot i
 	 */
-	virtual ds_lg::int64 hook(ds_lg::LeveledGraph *lg) const=0;
+	virtual ds_lg::int64 hook(ds_lg::Resolver<T> *res) const=0;
 	/*!
 	 * returns the port name in the leveled graph node where the fault is inserted
 	 * @return
@@ -72,7 +100,7 @@ public:
 	 * returns the graph node that owns this hook. This is the node whose behavior is affected by this hook
 	 * @return
 	 */
-	virtual ds_lg::LGNode* get_hook_node(ds_lg::LeveledGraph *lg) const=0;
+	virtual T* get_hook_node(ds_lg::Resolver<T> *res) const=0;
 
 };
 
@@ -80,7 +108,7 @@ public:
  * Static faults depend only the the current logic state of the circuit. They are well-suited for combinational simulation.
  * Static faults are active if the specified nodes in the leveled graph have certain logic values
  */
-class StaticFault : public SimulationHook, public PinReference {
+class StaticFault : public SimulationHook<ds_lg::LogicNode>, public PinReference {
 protected:
 
 	std::string node_name;							//!< node name
@@ -152,8 +180,8 @@ public:
 	 * @param lg leveled graph where the fault is injected
 	 * @return
 	 */
-	virtual ds_lg::LGNode* get_hook_node(ds_lg::LeveledGraph *lg) const {
-		ds_lg::LGNode *n = lg->get_node(node_name);
+	virtual ds_lg::LogicNode* get_hook_node(ds_lg::Resolver<ds_lg::LogicNode> *res) const {
+		ds_lg::LogicNode *n = res->get_node(node_name);
 		return n;
 	}
 	/*!
@@ -162,10 +190,10 @@ public:
 	 * Otherwise, it is checked if the logical value in the simulation primitive matches that specified in the condition
 	 * @return true if static fault is active
 	 */
-	virtual ds_lg::int64 hook(ds_lg::LeveledGraph* lg) const{
+	virtual ds_lg::int64 hook(ds_lg::Resolver<ds_lg::LogicNode>* res) const{
 		ds_lg::int64 active = -1L;
 		for(std::size_t i=0;i<aggressors.size();i++){
-			ds_lg::lg_v64 *agg_value = ds_faults::resolve(aggressors[i], lg);
+			ds_lg::lg_v64 *agg_value = ds_faults::resolve(aggressors[i], res);
 			ds_common::int64 v = agg_value->v;
 			ds_common::int64 p = polarity[i].v;
 			active &= ~(v ^ p) ;
