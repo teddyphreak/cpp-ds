@@ -19,17 +19,17 @@ using namespace ds_structural;
 using namespace ds_workspace;
 
 
-void serialization_test::serialize_paterns(const std::string& name) {
+void serialization_test::serialize_patterns(const std::string& name) {
 	const char* d = getenv("DS");
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
 	std::string path = d?d:"";
-	std::string file = path + "/files/" + name;
+	std::string file = path + "/files/" + name + ".wgl";
 	BOOST_LOG_TRIVIAL(info) << "... serializing " << file;
-	ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_pattern_blocks(file, false);
+	ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_pattern_blocks(file, true);
 
-	std::string p_name = path + "/files/" + name + ".ds";
+	std::string p_name = path + "/files/" + name + ".dsp";
 
 	{
 		std::ofstream ofs(p_name);
@@ -41,7 +41,6 @@ void serialization_test::serialize_paterns(const std::string& name) {
 
 	ds_pattern::CombinationalPatternProvider* r = 0;
 	{
-
 		std::ifstream ifs(p_name);
 		boost::archive::binary_iarchive ia(ifs);
 		ia >> r;
@@ -54,6 +53,8 @@ void serialization_test::serialize_paterns(const std::string& name) {
 	BOOST_CHECK(  p->get_num_inputs() ==  r->get_num_inputs() );
 	BOOST_CHECK( p->get_num_outputs() == r->get_num_outputs() );
 	BOOST_CHECK( p->num_blocks() == r->num_blocks() );
+
+	BOOST_LOG_TRIVIAL(info) << "# of blocks... " << p->num_blocks();
 
 	while (p->has_next()){
 
@@ -84,7 +85,7 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	ds_lg::LeveledGraph* lg = n->get_sim_graph(lib);
 	BOOST_CHECK(lg->sanity_check());
 
-	BOOST_LOG_TRIVIAL(info) << "Design :" << name << " imported";
+	BOOST_LOG_TRIVIAL(info) << "Design: " << name << " imported";
 	std::string d_name = path + "/files/" + name + ".dsn";
 	ds_structural::save_netlist(d_name, n);
 

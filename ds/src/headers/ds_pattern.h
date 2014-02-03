@@ -8,8 +8,6 @@
 #ifndef DS_PATTERN_H_
 #define DS_PATTERN_H_
 
-//#define BOOST_SPIRIT_DEBUG
-
 #include "ds_common.h"
 #include "stdio.h"
 #include <fstream>
@@ -190,19 +188,6 @@ namespace ds_pattern {
 					>> data [_val = _1]
 					>> lit("]")
 					>> lit(";");
-
-
-			BOOST_SPIRIT_DEBUG_NODE(order);
-			BOOST_SPIRIT_DEBUG_NODE(scan);
-			BOOST_SPIRIT_DEBUG_NODE(comment);
-			BOOST_SPIRIT_DEBUG_NODE(waveform);
-			BOOST_SPIRIT_DEBUG_NODE(timeplate);
-			BOOST_SPIRIT_DEBUG_NODE(data);
-			BOOST_SPIRIT_DEBUG_NODE(name);
-			BOOST_SPIRIT_DEBUG_NODE(magnitud);
-			BOOST_SPIRIT_DEBUG_NODE(start);
-			BOOST_SPIRIT_DEBUG_NODE(input_timeplate);
-			BOOST_SPIRIT_DEBUG_NODE(output_timeplate);
 		}
 
 		qi::rule<Iterator, std::string()> name, magnitud;
@@ -259,6 +244,7 @@ namespace ds_pattern {
 		}
 
 		bool is_compatible(const PatternValue& pv);
+
 		std::size_t get_specified_bits(){
 			boost::dynamic_bitset<> t_x(~x);
 			return t_x.count();

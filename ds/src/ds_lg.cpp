@@ -357,23 +357,19 @@ namespace ds_lg {
 		bool c = true;
 		if (nodes.size() <= 0){
 			c = false;
-			std::cout << "no nodes found!"<< std::endl;
 		}
 		for (LogicNode *n: nodes)
 		{
 			if (n->level >= num_levels){
 				c = false;
-				std::cout << "> max level"<< std::endl;
+				BOOST_LOG_TRIVIAL(error) << "level " << n->level << " > " << num_levels;
 			}
 
 			for (ds_lg::LogicNode *o: n->outputs)
 			{
 				if (!o->has_state())
-					if (n->level >= o->level){
+					if (n->level >= o->level)
 						c = false;
-						std::cout << "no state and wrong"<< std::endl;
-						std::cout << n->get_gate()->get_instance_name() << ":" << n->level << "  " << o->get_gate()->get_instance_name() << ":" << o->level<<std::endl;
-					}
 			}
 		}
 
@@ -384,7 +380,7 @@ namespace ds_lg {
 			);
 			if (cnt != level_width[i]){
 				c = false;
-				std::cout << "Inconsistent level (" << i <<") size: "<< cnt << "!=" << level_width[i] << std::endl;
+				BOOST_LOG_TRIVIAL(error) << "Inconsistent level (" << i <<") size: "<< cnt << "!=" << level_width[i];
 			}
 		}
 
@@ -486,20 +482,14 @@ namespace ds_lg {
 	}
 
 	ds_common::int64 LeveledGraph::propagate_to_check_point(ds_faults::SimulationHook<LogicNode> *h){
-		std::cout << "inside 1" << std::endl;
 		LogicNode *n = h->get_hook_node(this);
-		std::cout << "inside 2 " << n << std::endl;
 		n->add_hook(h);
-		std::cout << "inside 3" << std::endl;
 		LogicNode* node = get_check_point(n);
-		std::cout << "inside 4 " << node << std::endl;
 		lg_v64 ff = node->get_mark();
 		std::vector<LogicNode*> path;
 		path.push_back(n);
-		std::cout << "inside 5 " << n->get_type() << std::endl;
 		bool p = n->propagate(true);
 		n->remove_hook(h);
-		std::cout << "inside 6 " << std::endl;
 		if (p)
 			while (n!=node){
 				n = n->outputs[0];
@@ -507,17 +497,14 @@ namespace ds_lg {
 				if (!n->propagate(true))
 					break;
 			}
-		std::cout << "inside 7 " << std::endl;
 		lg_v64 faulty = n->peek();
 		for (LogicNode *p:path){
 			p->rollback();
 		}
-		std::cout << "inside 8 " << std::endl;
 		if (n!=node)
 			return 0;
 
 		ds_common::int64 result = ~ff.x & ~faulty.x & (ff.v ^ faulty.v);
-		std::cout << "inside out " << std::endl;
 		return result;
 	}
 

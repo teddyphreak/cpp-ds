@@ -45,9 +45,7 @@ ds_pattern::PatternList* ds_pattern::parse_wgl(const std::string& file, bool com
 
 ds_pattern::CombinationalPatternProvider* ds_pattern::load_pattern_blocks(const std::string& file, bool compact){
 	ds_pattern::PatternList* pl = ds_pattern::parse_wgl(file, compact);
-	BOOST_LOG_TRIVIAL(trace) << "Total patterns: " << pl->get_pattern_count();
 	ds_pattern::CombinationalPatternProvider* pattern_blocks = new ds_pattern::CombinationalPatternProvider(*pl);
-	BOOST_LOG_TRIVIAL(trace) << "Total patterns: " << pattern_blocks->num_blocks();
 	delete pl;
 	return pattern_blocks;
 }
@@ -121,14 +119,11 @@ ds_pattern::PatternList::PatternList(const scan_data& sd, bool compact) {
 bool ds_pattern::PatternValue::is_compatible(const PatternValue& pv){
 	boost::dynamic_bitset<> t_x(pv.x);
 	t_x |= x;
-
 	boost::dynamic_bitset<> t_v(pv.v);
 	t_v ^= v;
 	t_v = ~t_v;
-
 	t_v |= t_x;
 	t_v = ~t_v;
-
 	return t_v.count()==0;
 }
 

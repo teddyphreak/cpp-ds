@@ -28,8 +28,6 @@ void faults_test::get_collapsed_faults(const std::string& name) {
 		nl = ds_workspace::load_netlist("top",file);
 		BOOST_CHECK(nl->check_netlist());
 
-		std::cout << "netlist" << file << std::endl;
-
 		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 		BOOST_CHECK(lg->sanity_check());
 

@@ -70,28 +70,40 @@ NetList* ds_structural::NetList::clone(){
 	//copy signals
 	for (auto sig_it = signals.begin();sig_it!=signals.end();sig_it++){
 		Signal *s = sig_it->second;
-		Signal *copy = new Signal(s->get_instance_name());
+		Signal *s_copy = new Signal(s->get_instance_name());
 		for (auto port_it = s->port_begin(); port_it != s->port_end(); port_it++){
 			PortBit *port = *port_it;
-			std::string gate_name = port->get_gate()->get_instance_name();
-			Gate *g = find_gate(name);
-			PortBit *targetPort = g->find_port_by_name(port->get_instance_name());
-			copy->add_port(targetPort);
+			Gate *gate = port->get_gate();
+			if (gate != this){
+				std::string gate_name = gate->get_instance_name();
+				Gate *gate_copy = nl->find_gate(gate_name);
+				PortBit *targetPort = gate_copy->find_port_by_name(port->get_instance_name());
+				s_copy->add_port(targetPort);
+			} else {
+				PortBit *targetPort = nl->find_port_by_name(port->get_instance_name());
+				s_copy->add_port(targetPort);
+			}
 		}
-		nl->add_signal(copy);
+		nl->add_signal(s_copy);
 	}
 	// copy owned signals
 	for (auto sig_it = own_signals.begin();sig_it!=own_signals.end();sig_it++){
 		Signal *s = sig_it->second;
-		Signal *copy = new Signal(s->get_instance_name());
+		Signal *s_copy = new Signal(s->get_instance_name());
 		for (auto port_it = s->port_begin(); port_it != s->port_end(); port_it++){
 			PortBit *port = *port_it;
-			std::string gate_name = port->get_gate()->get_instance_name();
-			Gate *g = find_gate(name);
-			PortBit *targetPort = g->find_port_by_name(port->get_instance_name());
-			copy->add_port(targetPort);
+			Gate *gate = port->get_gate();
+			if (gate != this){
+				std::string gate_name = gate->get_instance_name();
+				Gate *gate_copy = nl->find_gate(gate_name);
+				PortBit *targetPort = gate_copy->find_port_by_name(port->get_instance_name());
+				s_copy->add_port(targetPort);
+			} else {
+				PortBit *targetPort = nl->find_port_by_name(port->get_instance_name());
+				s_copy->add_port(targetPort);
+			}
 		}
-		nl->own_signals[copy->get_instance_name()] = copy;
+		nl->own_signals[s_copy->get_instance_name()] = s_copy;
 	}
 	return nl;
 }
@@ -146,18 +158,26 @@ bool ds_structural::NetList::check_netlist(){
 		if (in_p == input_ports.end() && out_p == output_ports.end()){
 
 			if (pin==s->port_end() ){
-				check = false;
-				BOOST_LOG_TRIVIAL(warning) << "No input port for " << s->get_instance_name() << std::endl;
+				std::list<PortBit*>::const_iterator opin = std::find_if(s->port_begin(),s->port_end(),
+				boost::lambda::bind(&ds_structural::PortBit::get_gate, *_1)==this);
+				if (opin == s->port_end()){
+					check = false;
+					BOOST_LOG_TRIVIAL(warning) << "No input port for " << s->get_instance_name();
+				}
 			}
 			if (pout==s->port_end()){
-				check = false;
-				BOOST_LOG_TRIVIAL(warning) << "No output port for " << s->get_instance_name() << std::endl;
+				std::list<PortBit*>::const_iterator ipin = std::find_if(s->port_begin(),s->port_end(),
+				boost::lambda::bind(&ds_structural::PortBit::get_gate, *_1)==this);
+				if (ipin == s->port_end()){
+					check = false;
+					BOOST_LOG_TRIVIAL(warning) << "No output port for " << s->get_instance_name();
+				}
 			}
 		}
 		else {
 			if (in_p != input_ports.end() && out_p != output_ports.end()) {
 				check = false;
-				std::cout << "Error: signal connected to both input and output " << s->get_instance_name();
+				BOOST_LOG_TRIVIAL(warning) << "Error: signal connected to both input and output " << s->get_instance_name();
 			}
 			if (out_p==output_ports.end()){
 				if (pout!=s->port_end()){
@@ -241,20 +261,6 @@ std::string ds_structural::PortBit::get_qualified_name() const {
 	const Gate *g = get_gate();
 	return g->get_instance_name() + "/" + get_instance_name();
 }
-
-//ds_lg::LeveledGraph* ds_structural::NetList::clone_sim_graph(){
-//
-//	if (lg==0)
-//		return 0;
-//
-//	lg = 0;
-//	for (auto gate_it = gates.begin();gate_it!=gates.end();gate_it++){
-//		Gate* g = gate_it->second;
-//		ds_lg::LogicNode* n = g->get_logic_node();
-//		g->set_lgn(n->clone());
-//	}
-//	return get_sim_graph();
-//}
 
 ds_lg::LeveledGraph* ds_structural::NetList::get_sim_graph(ds_library::Library *lib){
 	std::map<Gate*,ds_lg::LogicNode*> node_map;
@@ -750,12 +756,86 @@ ds_structural::NetList* ds_structural::load_netlist(const std::string& file, ds_
 		for (PortBit *pb: g->outputs){
 			pb->set_gate(g);
 		}
-		//ds_lg::LogicNode* lgn = wp->get_primitive(g->get_type(), g->get_num_ports());
-		//g->set_lgn(lgn);
 	}
-
-
-
-
 	return nl;
 }
+
+std::string ds_structural::get_implicit_instantiation(ds_structural::Gate* g){
+	std::string instance = g->get_type() + "\t" + g->get_instance_name() + " ( ";
+	ds_structural::port_container ports;
+	const ds_structural::port_container* outputs = g->get_outputs();
+	const ds_structural::port_container* inputs = g->get_inputs();
+	ports.insert(ports.begin(), inputs->begin(), inputs->end());
+	ports.insert(ports.end(), outputs->begin(), outputs->end());
+	int num_ports = g->get_num_ports();
+	int ports_it = 0;
+	for (auto it=ports.begin();it!=ports.end();it++){
+		ports_it++;
+		const ds_structural::PortBit *pb = *it;
+		instance += pb->get_signal()->get_instance_name();
+		if (ports_it < num_ports){
+			instance += ", ";
+		}
+	}
+	instance += " );";
+	return instance;
+}
+
+bool ds_structural::parse_nxp_chain_info(const std::string& file, std::vector<ScanPort>& ports){
+
+	namespace spirit = boost::spirit;
+
+	std::ifstream input(file.c_str());
+	bool parse = false;
+
+	if (input.is_open()){
+
+		spirit::istream_iterator begin(input);
+		spirit::istream_iterator end;
+
+		ds_structural::nxp_chain_info_parser<spirit::istream_iterator> parser;
+
+		parse =  boost::spirit::qi::phrase_parse(begin, end, parser, spirit::ascii::space, ports);
+
+	} else {
+		BOOST_LOG_TRIVIAL(error) << "Error parsing chain info file: " << file << ". Device not open";
+		BOOST_THROW_EXCEPTION(ds_common::file_read_error() << boost::errinfo_errno(errno));
+	}
+	return parse;
+}
+
+ds_structural::CombinationalScanMap* ds_structural::get_combinational_scan_map(const std::string& file_name){
+	std::vector<ds_structural::ScanPort> ports;
+	bool parse = ds_structural::parse_nxp_chain_info(file_name, ports);
+	if (parse){
+		ds_structural::CombinationalScanMap* map = new ds_structural::CombinationalScanMap(ports.begin(), ports.end());
+		return map;
+	} else {
+		return 0;
+	}
+}
+
+ds_structural::NetList::~NetList(){
+
+	for (signal_map_t::iterator it=signals.begin();it!=signals.end();it++){
+		it->second->detach();
+		delete it->second;
+	}
+	for (signal_map_t::iterator it=own_signals.begin();it!=own_signals.end();it++){
+		delete it->second;
+	}
+	for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
+		delete it->second;
+	}
+
+}
+
+ds_structural::Gate::~Gate(){
+	for (PortBit* in: inputs){
+		delete(in);
+	}
+	for (PortBit* out: outputs){
+		delete(out);
+	}
+}
+

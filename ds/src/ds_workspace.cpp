@@ -10,8 +10,7 @@ ds_workspace::Workspace* ds_workspace::Workspace::instance = 0;
 
 bool ds_workspace::Workspace::is_defined(const std::string& name, std::size_t ports){
 	bool found = false;
-	typedef std::vector<ds_library::Library*>::iterator LIB_IT;
-	for (LIB_IT lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
+	for (auto lib_it = libraries.begin();lib_it!=libraries.end();lib_it++){
 		ds_library::Library *l = *lib_it;
 		if (l->has_gate(name, ports)){
 			found = true;

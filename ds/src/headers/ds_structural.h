@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <stack>
 #include <fstream>
+#include <sstream>
 #include "ds_common.h"
 #include <boost/checked_delete.hpp>
 #include <boost/serialization/access.hpp>
@@ -21,6 +22,13 @@
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/spirit/include/karma.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/spirit/include/phoenix_core.hpp>
+#include <boost/spirit/include/phoenix_operator.hpp>
+#include <boost/spirit/include/phoenix_stl.hpp>
+#include <boost/spirit/include/phoenix_fusion.hpp>
 
 namespace ds_lg {
 	class LogicNode;
@@ -219,7 +227,7 @@ namespace ds_structural {
 		 */
 		void detach(){
 			for (ds_structural::PortBit *pb:ports){
-			pb->disconnect();
+				pb->disconnect();
 			}
 		}
 	};
@@ -339,7 +347,7 @@ namespace ds_structural {
 			port_container* ports = &outputs;
 			if (pb->get_type()==DIR_IN)
 				ports = &inputs;
-			port_container::iterator port = std::find_if(ports->begin(), ports->end(),
+				port_container::iterator port = std::find_if(ports->begin(), ports->end(),
 					[&](PortBit* p) {
 				return pb->get_instance_name() == p->get_instance_name();
 			});
@@ -370,15 +378,11 @@ namespace ds_structural {
 		/*!
 		 * gate destructor. It deletes inputs and outputs.
 		 */
-		virtual ~Gate() {
-			for (PortBit* in: inputs){
-				delete(in);
-			}
-			for (PortBit* out: outputs){
-				delete(out);
-			}
-		}
+		virtual ~Gate();
 	};
+
+	std::string get_implicit_instantiation(ds_structural::Gate* g);
+
 	/*!
 	 * a netlist is a gate which may contain another gates and holds signals connecting ports.
 	 * A netlist constructs an equivalent leveled graph for simulation
@@ -393,7 +397,7 @@ namespace ds_structural {
 		int signal_counter;							//!< number of signals so far
 		signal_map_t own_signals;					//!< auxiliary signals
 		assignment_map_t assignment_map;
-		ds_lg::LeveledGraph* lg;						//!< corresponding leveled graph instance
+		//ds_lg::LeveledGraph* lg;						//!< corresponding leveled graph instance
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
@@ -425,7 +429,7 @@ namespace ds_structural {
 		/*!
 		 * leveled graph pointer is null
 		 */
-		NetList():lg(0){}
+		NetList(){}
 		/*!
 		 * sets the name of this netlist
 		 */
@@ -560,20 +564,7 @@ namespace ds_structural {
 		/*!
 		 * netlist destructor. It deletes its internal signals and gates
 		 */
-		~NetList(){
-
-			for (signal_map_t::iterator it=signals.begin();it!=signals.end();it++){
-				it->second->detach();
-				delete it->second;
-			}
-			for (signal_map_t::iterator it=own_signals.begin();it!=own_signals.end();it++){
-				delete it->second;
-			}
-			for (gate_map_t::iterator it=gates.begin();it!=gates.end();it++){
-				delete it->second;
-			}
-
-		}
+		~NetList();
 		/*!
 		 * performs various sanity checks to verify the integrity of the netlist
 		 * @return true if check is successful
@@ -588,6 +579,40 @@ namespace ds_structural {
 		 * @return true if any gate was removed
 		 */
 		bool remove_unused_gates();
+		/*!
+		 *
+		 */
+		template <typename OutputIterator>
+		void dump_verilog_implicit(OutputIterator& sink)
+		{
+			ds_structural::port_container all_ports;
+			all_ports.insert(all_ports.end(), inputs.begin(), inputs.end());
+			all_ports.insert(all_ports.end(), outputs.begin(), outputs.end());
+			sink << "module " << get_instance_name() << " (\n";
+			auto it=all_ports.begin();
+			if (it!=all_ports.end()){
+				PortBit* first = *it++;
+				sink << first->get_instance_name();
+				for (;it!=all_ports.end();it++){
+					PortBit* pb = *it;
+					sink << ",\n" << pb->get_instance_name();
+				}
+			}
+			sink << ");\n";
+			for (auto it=inputs.begin();it!=inputs.end();it++){
+				PortBit *pb = *it;
+				sink << "input\t" << pb->get_instance_name() << ";\n";
+			}
+			for (auto it=outputs.begin();it!=outputs.end();it++){
+				PortBit *pb = *it;
+				sink << "output\t" << pb->get_instance_name() << ";\n";
+			}
+			for (auto it=gates.begin();it!=gates.end();it++){
+				Gate *g = it->second;
+				sink << ds_structural::get_implicit_instantiation(g) << std::endl;
+			}
+			sink << "endmodule";
+		}
 	protected:
 		/*!
 		 * connects the simulation output with the simulation input equivalent to the provided port
@@ -601,6 +626,167 @@ namespace ds_structural {
 	void save_netlist(const std::string& file, ds_structural::NetList *nl);
 
 	NetList* load_netlist(const std::string& file, ds_workspace::Workspace* wp);
+
+	struct ScanPort{
+		std::string signal_name;
+		std::string type;
+		std::string chain_number;
+		std::string ff_number;
+	};
+
+	class CombinationalScanMap {
+		typedef std::vector<std::vector<std::string> > ScanConfiguration;
+		ScanConfiguration inputs;
+		ScanConfiguration outputs;
+	public:
+		int get_output_chains() const {return outputs.size();}
+		int get_input_chains() const {return inputs.size();}
+		int get_output_chain_length(const int& i) const {return outputs[i].size();}
+		int get_input_chain_length(const int& i) const {return inputs[i].size();}
+		std::string get_output_signal(const int& ch, const int& ff) const {return outputs[ch][ff];}
+		std::string get_input_signal(const int& ch, const int& ff) const {return inputs[ch][ff];}
+		std::vector<std::string>::const_iterator get_inputs_begin(const int &chain) const {return inputs[chain].begin();}
+		std::vector<std::string>::const_iterator get_inputs_end(const int &chain) const {return inputs[chain].end();}
+		std::vector<std::string>::const_iterator get_outputs_begin(const int &chain) const {return outputs[chain].begin();}
+		std::vector<std::string>::const_iterator get_outputs_end(const int &chain) const {return outputs[chain].end();}
+
+		template<typename T>
+		CombinationalScanMap(T start, T end){
+			std::map<int,std::vector<std::pair<int, std::string> >* > input_map;
+			std::map<int,std::vector<std::pair<int, std::string> >* > output_map;
+			for (T it = start;it!=end;it++){
+				ScanPort p = *it;
+
+				bool is_input = p.type == "FFINPUT";
+
+				std::map<int, std::vector<std::pair<int, std::string> >* >* map = &output_map;
+				if (is_input){
+					map = &input_map;
+				}
+
+				std::stringstream cn(p.chain_number);
+				int chain_number = 0;
+				cn >> chain_number;
+
+				std::stringstream fn(p.ff_number);
+				int ff_number = 0;
+				fn >> ff_number;
+
+				auto chain_it = map->find(chain_number);
+				std::vector<std::pair<int, std::string> >*chain = 0;
+				std::pair<int, std::string> pair(ff_number, p.signal_name);
+				if (chain_it == map->end()){
+					chain = new std::vector<std::pair<int, std::string> >();
+					std::pair<int, std::vector<std::pair<int, std::string> >* > new_pair(chain_number, chain);
+					map->insert(new_pair);
+				} else {
+					chain = chain_it->second;
+				}
+				chain->push_back(pair);
+			}
+			for (auto it=input_map.begin();it!=input_map.end();it++){
+				std::vector<std::pair<int, std::string> >*chain = it->second;
+				std::sort(chain->begin(),chain->end(),
+					[](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b) -> bool {
+				    	return b.first > a.first;
+					}
+				);
+				std::vector<std::string> scan;
+				for (auto it = chain->begin();it!=chain->end();it++){
+					scan.push_back(it->second);
+				}
+				inputs.push_back(scan);
+			}
+			for (auto it=output_map.begin();it!=output_map.end();it++){
+				std::vector<std::pair<int, std::string> >*chain = it->second;
+				std::sort(chain->begin(),chain->end(),
+					[](const std::pair<int, std::string>& a, const std::pair<int, std::string>& b) -> bool {
+				    	return b.first > a.first;
+					}
+				);
+				std::vector<std::string> scan;
+				for (auto it = chain->begin();it!=chain->end();it++){
+					scan.push_back(it->second);
+				}
+				outputs.push_back(scan);
+			}
+			for (auto it=input_map.begin();it!=input_map.end();it++){
+				delete it->second;
+			}
+			for (auto it=output_map.begin();it!=output_map.end();it++){
+				delete it->second;
+			}
+
+		}
+	};
+
+	CombinationalScanMap* get_combinational_scan_map(const std::string& file_name);
+
+	bool parse_nxp_chain_info(const std::string& file, std::vector<ScanPort>& ports);
+
 }
+
+BOOST_FUSION_ADAPT_STRUCT(
+    ds_structural::ScanPort,
+    (std::string, signal_name)
+    (std::string, type)
+    (std::string, chain_number)
+    (std::string, ff_number)
+)
+
+namespace ds_structural {
+	/*!
+	 * scan info qi grammar
+	 */
+	namespace qi = boost::spirit::qi;
+	namespace ascii = boost::spirit::ascii;
+
+	template <typename Iterator>
+	struct nxp_chain_info_parser : qi::grammar<Iterator,std::vector<ds_structural::ScanPort>(), ascii::space_type>
+	{
+
+		nxp_chain_info_parser() : nxp_chain_info_parser::base_type(start, "nxp_chain_info")
+		{
+			using qi::int_;
+			using qi::char_;
+			using qi::lit;
+			using qi::_1;
+			using boost::spirit::_val;
+			using boost::phoenix::push_back;
+
+			start = *port[push_back(_val,_1)];
+
+			port %=
+					name >>
+					lit(':') >>
+					name >>
+					chain_nr >>
+					ff_nr;
+
+			name = qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
+			chain_nr = ",chainnr=" >> +qi::char_("0-9");
+			ff_nr = ",FFnr=" >> +qi::char_("0-9");
+
+//			name.name("name");
+//			chain_nr.name("chain_nr");
+//			ff_nr.name("ff_nr");
+//			port.name("port");
+//			start.name("start");
+//			debug(name);
+//			debug(chain_nr);
+//			debug(ff_nr);
+//			debug(port);
+//			debug(start);
+		}
+
+		qi::rule<Iterator, std::string()> name;
+		qi::rule<Iterator, std::string()> chain_nr;
+		qi::rule<Iterator, std::string()> ff_nr;
+		qi::rule<Iterator, ds_structural::ScanPort()> port;
+		qi::rule<Iterator, std::vector<ds_structural::ScanPort>(), ascii::space_type> start;
+
+	};
+}
+
 
 #endif

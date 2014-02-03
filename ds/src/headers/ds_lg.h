@@ -86,7 +86,7 @@ namespace ds_lg {
 	inline lg_v64 f_xnor8(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d, val64_cpc e, val64_cpc f, val64_cpc g, val64_cpc h){ return ~(*a ^ *b ^ *c ^ *d ^ *e ^ *f ^ *g ^ *h );}
 	inline lg_v64 f_xor8(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d, val64_cpc e, val64_cpc f, val64_cpc g, val64_cpc h){ return *a ^ *b ^ *c ^ *d ^ *e ^ *f ^ *g ^ *h;}
 
-	inline lg_v64 f_mux2(val64_cpc a, val64_cpc b, val64_cpc c){ return (*a & *c) | (*b & ~(*c));}
+	inline lg_v64 f_mux2(val64_cpc a, val64_cpc b, val64_cpc c){ return (*b & *c) | (*a & ~(*c));}
 
 	/*!
 	 * interface to observe any node simulation event.

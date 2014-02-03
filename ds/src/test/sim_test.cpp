@@ -14,13 +14,37 @@
 #include "ds_faults.h"
 #include "ds_simulation.h"
 #include <boost/log/trivial.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 void sim_test::test_sim(){
+	BOOST_LOG_TRIVIAL(info) << "Simulation Test...";
+	lg_sim_test("p45k.v", "p45k.wgl", "top");
 	lg_sim_test("p100k.v", "p100k.wgl", "top");
+	lg_sim_test("p141k.v", "p141k.wgl", "top");
+	lg_sim_test("p239k.v", "p239k.wgl", "top");
+	lg_sim_test("p259k.v", "p259k.wgl", "top");
+	lg_sim_test("p267k.v", "p267k.wgl", "top");
+	lg_sim_test("p269k.v", "p269k.wgl", "top");
+	lg_sim_test("p279k.v", "p279k.wgl", "top");
+	lg_sim_test("p286k.v", "p286k.wgl", "top");
+	lg_sim_test("p295k.v", "p295k.wgl", "top");
+	lg_sim_test("p330k.v", "p330k.wgl", "top");
 };
 
 void sim_test::test_fc(){
-	fc_test("p45k.v", "p45k.wgl", "top");
+	BOOST_LOG_TRIVIAL(info) << "FC Test";
+	fc_test("p45k.v", "p45k.dsp", "top");
+	fc_test("p100k.v", "p100k.dsp", "top");
+	fc_test("p141k.v", "p141k.dsp", "top");
+	fc_test("p239k.v", "p239k.dsp", "top");
+	fc_test("p259k.v", "p259k.dsp", "top");
+	fc_test("p267k.v", "p267k.dsp", "top");
+	fc_test("p269k.v", "p269k.dsp", "top");
+	fc_test("p279k.v", "p279k.dsp", "top");
+	fc_test("p286k.v", "p286k.dsp", "top");
+	fc_test("p295k.v", "p295k.dsp", "top");
+	fc_test("p330k.v", "p330k.dsp", "top");
 };
 
 void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
@@ -29,23 +53,31 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	if (!d){
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
+	BOOST_LOG_TRIVIAL(info) << "Circuit " << design;;
 	std::string path = d?d:"";
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
-	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, true);
+
+	ds_pattern::CombinationalPatternProvider* provider = 0;
+	{
+		std::ifstream ifs(pattern_file);
+		boost::archive::binary_iarchive ia(ifs);
+		ia >> provider;
+	}
+
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
 	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
-	BOOST_LOG_TRIVIAL(debug) << "Calculating fault set...";
+	BOOST_LOG_TRIVIAL(info) << "Calculating fault set...";
 	ds_faults::FaultList fl(nl);
 	int total_blocks = provider->num_blocks();
-	BOOST_LOG_TRIVIAL(debug) << "Beginning fault coverage calculation with " << total_blocks << " ...";
+	BOOST_LOG_TRIVIAL(info) << "Beginning fault coverage calculation with " << total_blocks << " ...";
 
 	ds_simulation::run_combinational_fault_coverage(lg, &fl, provider);
 	double fc = fl.get_fc();
-	BOOST_LOG_TRIVIAL(info) << "Fault coverage: " << fc << std::endl;
+	BOOST_LOG_TRIVIAL(info) << "Fault coverage: " << fc;
 	std::set<ds_faults::SAFaultDescriptor*> detected;
 	fl.get_detected_faults(detected);
-	BOOST_LOG_TRIVIAL(info) << "Detected faults: " << detected.size() << std::endl;
+	BOOST_LOG_TRIVIAL(info) << "Detected faults: " << detected.size();
 
 }
 

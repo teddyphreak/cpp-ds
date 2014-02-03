@@ -8,8 +8,6 @@
 #ifndef LIBRARY_H_
 #define LIBRARY_H_
 
-//#define BOOST_SPIRIT_DEBUG
-
 #include "ds_common.h"
 #include "ds_lg.h"
 #include "stdio.h"
@@ -412,7 +410,6 @@ namespace ds_library {
 		{
 			namespace qi = boost::spirit::qi;
 			namespace phoenix = boost::phoenix;
-			namespace ascii = boost::spirit::ascii;
 			using qi::int_;
 			using qi::char_;
 			using qi::lit;
@@ -455,20 +452,31 @@ namespace ds_library {
 			explicit_i = name >> name >> lit('(') >> binding % ',' >> lit(')');
 			binding = lit('.') >> name >> lit('(') >> ( name | b_constant) >> lit(')');
 
-			BOOST_SPIRIT_DEBUG_NODE(name);
-			BOOST_SPIRIT_DEBUG_NODE(b_constant);
-			BOOST_SPIRIT_DEBUG_NODE(slice);
-			BOOST_SPIRIT_DEBUG_NODE(ports);
-			BOOST_SPIRIT_DEBUG_NODE(aggregate);
-			BOOST_SPIRIT_DEBUG_NODE(declaration);
-			BOOST_SPIRIT_DEBUG_NODE(assign);
-			BOOST_SPIRIT_DEBUG_NODE(implicit_i);
-			BOOST_SPIRIT_DEBUG_NODE(start);
-			BOOST_SPIRIT_DEBUG_NODE(netlist);
-			BOOST_SPIRIT_DEBUG_NODE(assign);
-			BOOST_SPIRIT_DEBUG_NODE(implicit_i);
-			BOOST_SPIRIT_DEBUG_NODE(explicit_i);
-			BOOST_SPIRIT_DEBUG_NODE(instance);
+			name.name("name");
+			slice.name("slice");
+			number.name("number");
+			b_constant.name("b_constant");
+			ports.name("ports");
+			binding.name("binding");
+			aggregate.name("aggregate");
+			declaration.name("declaration");
+			assign.name("assign");
+			implicit_i.name("implicit_i");
+			explicit_i.name("explicit_i");
+			instance.name("instance");
+			netlist.name("netlist");
+			//debug(name);
+			//debug(slice);
+			//debug(b_constant);
+			//debug(ports);
+			//debug(binding);
+			//debug(aggregate);
+			//debug(declaration);
+			//debug(assign);
+			//debug(implicit_i);
+			//debug(explicit_i);
+			//debug(instance);
+			//debug(netlist);
 
 		}
 

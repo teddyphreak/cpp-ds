@@ -258,9 +258,10 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Error parsing verilog file"));
 	}
 
-	auto top = std::find_if(netlists.begin(), netlists.end(), 	[&] (ds_library::parse_netlist& pn){
+	auto top = std::find_if(netlists.begin(), netlists.end(), [&] (ds_library::parse_netlist& pn){
 		return pn.nl_name == toplevel;
 	});
+
 	if (top == netlists.end()){
 		BOOST_LOG_TRIVIAL(error) << "Design " << toplevel << " not found";
 		BOOST_THROW_EXCEPTION(ds_common::parse_error() << ds_common::errmsg_info("Design " + toplevel + " not found"));
@@ -299,7 +300,7 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 						[&] (const parse_netlist& n) { return (n.nl_name == dep.first) && (n.ports.size()==dep.second);});
 
 				if (parsed == netlists.end()){
-					BOOST_LOG_TRIVIAL(error) << "Design " + toplevel + " not found" << std::endl;
+					BOOST_LOG_TRIVIAL(error) << "Design " + toplevel + " not found";
 					BOOST_THROW_EXCEPTION(ds_common::parse_error()	<< ds_common::errmsg_info("Design " + toplevel + " not found"));
 				}
 
@@ -365,11 +366,13 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 	{
 		boost::apply_visitor(aggregate_v, p);				// create inputs
 	}
+	BOOST_LOG_TRIVIAL(trace) << "Inputs processed";
 	aggregate_v.set_port_type(ds_structural::DIR_OUT);
 	for ( ds_library::verilog_declaration p: nl.outputs )
 	{
 		boost::apply_visitor(aggregate_v, p);				// create outputs
 	}
+	BOOST_LOG_TRIVIAL(trace) << "Outputs processed";
 	for ( ds_library::verilog_declaration p: nl.inouts )
 	{
 		boost::apply_visitor(aggregate_v, p);				// create bidireccional ports
@@ -379,10 +382,12 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 	{
 		boost::apply_visitor(aggregate_v, p);				// create signals
 	}
+	BOOST_LOG_TRIVIAL(trace) << "Signals processed";
 	for ( ds_library::verilog_instance instance: nl.instances )
 	{
 		boost::apply_visitor(instance_v, instance);			// create gates
 	}
+	BOOST_LOG_TRIVIAL(trace) << "Gates processed";
 	for ( ds_library::parse_nl_assignment assignment: nl.assignments )
 	{
 		// handle assignments
@@ -405,9 +410,9 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 			g->set_parent(netlist);
 		}
 	}
-
+	BOOST_LOG_TRIVIAL(trace) << "Assignments processed";
 	netlist->remove_floating_signals();
-
+	BOOST_LOG_TRIVIAL(trace) << "...done";
 	return netlist;
 }
 
@@ -531,6 +536,9 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_explici
 			std::string actual = it->second;
 
 			ds_structural::PortBit* pb = g->find_port_by_name(formal);
+			if (pb==0){
+				BOOST_LOG_TRIVIAL(error) << "Undefined port '" << formal << "' in " <<type;
+			}
 			ds_structural::Signal *signal = netlist->find_signal(actual);
 			if (signal==0){
 				signal = new ds_structural::Signal(actual);
@@ -550,7 +558,7 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_explici
 			pb->set_signal(signal);
 		}
 	} else {
-		BOOST_LOG_TRIVIAL(error) << "Gate"  << type << "not  found. Hierarchical explicit instances not supported yet... ";
+		BOOST_LOG_TRIVIAL(error) << "Gate '"  << type << "' not  found. Hierarchical explicit instances not supported yet... ";
 		BOOST_THROW_EXCEPTION(ds_common::parse_error()
 				<< ds_common::errmsg_info("Gate "  + type + " not  found. Hierarchical explicit instances not supported yet... "));
 	}

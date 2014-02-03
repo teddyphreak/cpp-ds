@@ -1,5 +1,6 @@
 #ifndef DS_COMMON_H_
 #define DS_COMMON_H_
+
 #include <boost/exception/all.hpp>
 #include <boost/serialization/access.hpp>
 
