@@ -21,12 +21,10 @@ namespace trans_test {
 	{
 		trans_ts(const std::string& name):boost::unit_test::test_suite(name)
 	    {
-//	    	circuits_to_transform.push_back( "p45k_nan" );
-//	    	circuits_to_transform.push_back( "p100k_nan" );
-//	    	circuits_to_transform.push_back( "p141k_nan" );
-//	    	circuits_to_transform.push_back( "p239k_nan" );
-//	    	circuits_to_transform.push_back( "p259k_nan" );
-//	    	circuits_to_transform.push_back( "p267k_nan" );
+	    	circuits_to_transform.push_back( "p45k_nan" );
+	    	circuits_to_transform.push_back( "p100k_nan" );
+	    	circuits_to_transform.push_back( "p141k_nan" );
+	    	circuits_to_transform.push_back( "p267k_nan" );
 	    	circuits_to_transform.push_back( "p269k_nan" );
 	    	circuits_to_transform.push_back( "p279k_nan" );
 	    	circuits_to_transform.push_back( "p286k_nan" );

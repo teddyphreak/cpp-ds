@@ -382,6 +382,7 @@ namespace ds_structural {
 	};
 
 	std::string get_implicit_instantiation(ds_structural::Gate* g);
+	std::string get_explicit_instantiation(ds_structural::Gate* g);
 
 	/*!
 	 * a netlist is a gate which may contain another gates and holds signals connecting ports.
@@ -456,6 +457,13 @@ namespace ds_structural {
 				s->remove_port(pb);
 			}
 		}
+
+		void change_signal_name(Signal *s, const std::string& name){
+			signals.erase(s->get_instance_name());
+			s->set_name(name);
+			add_signal(s);
+		}
+
 		/*!
 		 * creates a new netlist with the same structure as this netlist. Useful to instantiate hierarchical designs
 		 * @return deep copy of this netlist
@@ -583,8 +591,15 @@ namespace ds_structural {
 		 *
 		 */
 		template <typename OutputIterator>
-		void dump_verilog_implicit(OutputIterator& sink)
-		{
+		void dump_verilog_implicit(OutputIterator& sink){
+			dump_verilog(sink, false);
+		}
+		template <typename OutputIterator>
+		void dump_verilog_explicit(OutputIterator& sink){
+			dump_verilog(sink, true);
+		}
+		template <typename OutputIterator>
+		void dump_verilog(OutputIterator& sink, const bool& verilog_ex){
 			ds_structural::port_container all_ports;
 			all_ports.insert(all_ports.end(), inputs.begin(), inputs.end());
 			all_ports.insert(all_ports.end(), outputs.begin(), outputs.end());
@@ -609,7 +624,11 @@ namespace ds_structural {
 			}
 			for (auto it=gates.begin();it!=gates.end();it++){
 				Gate *g = it->second;
-				sink << ds_structural::get_implicit_instantiation(g) << std::endl;
+				if (verilog_ex){
+					sink << ds_structural::get_explicit_instantiation(g) << std::endl;
+				} else {
+					sink << ds_structural::get_implicit_instantiation(g) << std::endl;
+				}
 			}
 			sink << "endmodule";
 		}
@@ -639,10 +658,10 @@ namespace ds_structural {
 		ScanConfiguration inputs;
 		ScanConfiguration outputs;
 	public:
-		int get_output_chains() const {return outputs.size();}
-		int get_input_chains() const {return inputs.size();}
-		int get_output_chain_length(const int& i) const {return outputs[i].size();}
-		int get_input_chain_length(const int& i) const {return inputs[i].size();}
+		unsigned int get_output_chains() const {return outputs.size();}
+		unsigned int get_input_chains() const {return inputs.size();}
+		unsigned int get_output_chain_length(const int& i) const {return outputs[i].size();}
+		unsigned int get_input_chain_length(const int& i) const {return inputs[i].size();}
 		std::string get_output_signal(const int& ch, const int& ff) const {return outputs[ch][ff];}
 		std::string get_input_signal(const int& ch, const int& ff) const {return inputs[ch][ff];}
 		std::vector<std::string>::const_iterator get_inputs_begin(const int &chain) const {return inputs[chain].begin();}

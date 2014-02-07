@@ -7,6 +7,7 @@
 
 #include "ds_trans.h"
 #include "ds_structural.h"
+#include <fstream>
 #include <boost/log/trivial.hpp>
 
 ds_structural::Gate* ds_trans::get_scan_ff(const ds_trans::ScanFFInfo& info){
@@ -94,7 +95,7 @@ ds_structural::NetList* ds_trans::insert_scan_chains(ds_structural::NetList *nl,
 			ds_structural::PortBit *output_port = seq->find_port_by_name(output_name);
 
 			ds_structural::Gate *ff = get_scan_ff(ff_info);
-			ff->set_instance_name(scan_properties.ff_name + "_" + std::to_string(i) + std::to_string(j));
+			ff->set_instance_name(scan_properties.ff_name + "_" + std::to_string(i) + "_" + std::to_string(j));
 			seq->add_gate(ff);
 			ffs_in_chain.push_back(ff);
 
@@ -148,8 +149,11 @@ ds_structural::NetList* ds_trans::insert_scan_chains(ds_structural::NetList *nl,
 		ds_structural::PortBit *so_port = new ds_structural::PortBit(so_name, ds_structural::DIR_OUT);
 		ds_structural::Gate *last_ff = ffs_in_chain[chain_length-1];
 		ds_structural::PortBit *last_sp = last_ff->find_port_by_name(ff_info.q_port);
-		last_sp->get_signal()->add_port(so_port);
+		ds_structural::Signal *so_signal = last_sp->get_signal();
+		so_signal->add_port(so_port);
+		seq->change_signal_name(so_signal, so_name);
 		so_port->set_gate(seq);
+		seq->add_port(so_port);
 
 		ffs.push_back(ffs_in_chain);
 	}
@@ -183,5 +187,64 @@ void ds_trans::insert_top_level_scan(std::string top_level, std::string scan_por
 			signal->add_port(p);
 		}
 	}
+}
+
+void ds_trans::write_test_procedures(const std::string& dofile_name, const std::string& tp_name, const std::string& sg_name,
+		const ds_structural::CombinationalScanMap *map,
+		const ds_trans::TimeplateDesc& tp_slow,
+		const ds_trans::TimeplateDesc& tp_fast,
+		const ds_trans::ScanProperties& properties,
+		const std::string& pattern_file){
+
+		if (map->get_input_chains() != map->get_output_chains()){
+			BOOST_LOG_TRIVIAL(error) << "Number of input and output scan chains does not match";
+			return;
+		}
+
+		std::string clk_name = properties.clk_name;
+		std::string se_name = properties.se_name;
+		std::string si_name = properties.si_name;
+		std::string so_name = properties.so_name;
+		std::string rst_name = properties.reset_name;
+
+
+		std::ofstream dofile(dofile_name);
+		dofile << "add clocks 0 " << clk_name << std::endl;
+
+		unsigned int num_chains = map->get_input_chains();
+		unsigned int max_length = map->get_output_chain_length(0);
+		for (std::size_t i=1;i<num_chains;i++){
+			if (map->get_output_chain_length(i) > max_length){
+				max_length = map->get_output_chain_length(i);
+			}
+		}
+
+		std::ofstream file(tp_name);
+		file << std::endl;
+		tp_slow.print(file);
+		file << std::endl;
+		ds_trans::print_load_unload(file, tp_slow, sg_name, clk_name, false, se_name, true, rst_name, true, max_length);
+		file << std::endl;
+		ds_trans::print_shift(file, tp_slow, clk_name, sg_name);
+		file << std::endl;
+		tp_fast.print(file);
+		file << std::endl;
+		ds_trans::print_capture(file, tp_fast);
+		file << std::endl;
+		file.close();
+
+		dofile << "add scan groups " << sg_name << " " << tp_name << std::endl;
+		for (std::size_t i=0;i<num_chains;i++){
+			std::string chain_name = "chain_" + std::to_string(i);
+			dofile << "add scan chains " << chain_name << " " << sg_name << " " << si_name << std::to_string(i) << " " << so_name << std::to_string(i) << std::endl;
+		}
+		dofile << "set system mode atpg" << std::endl;
+		dofile << "set fault type transition -no-shift_launch" << std::endl;
+		dofile << "create patterns -auto" << std::endl;
+		dofile << "save patterns " << pattern_file << " -procfile -wgl -replace -parallel -begin 0 -scan_test -mode_internal" << std::endl;
+		dofile << "exit" << std::endl;
+		dofile.close();
+
+
 }
 

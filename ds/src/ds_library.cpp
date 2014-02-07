@@ -393,21 +393,33 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 		// handle assignments
 		ds_structural::Signal *s_lhs = netlist->find_signal(assignment.lhs);
 		ds_structural::Signal *s_rhs = netlist->find_signal(assignment.rhs);
-		if (s_lhs == 0 || s_rhs == 0){
-			BOOST_LOG_TRIVIAL(warning)  << "Assignment signals not found: " <<  assignment.lhs << " <= " << assignment.rhs;
+		if (s_lhs == 0){
+			BOOST_LOG_TRIVIAL(warning)  << "Assignment signals not found: " <<  assignment.lhs << "* <= " << assignment.rhs;
 		} else {
-			// instantiate a buffer and setup inputs and outputs
-			ds_structural::Gate *g = workspace->get_gate("buf", 2);
-			//TODO Ask the library (workspace) for the port names
-			ds_structural::PortBit* in = g->find_port_by_name("i1");
-			ds_structural::PortBit* out = g->find_port_by_name("o1");
-			g->set_instance_name("assign_" + s_lhs->get_instance_name() + "_" + s_rhs->get_instance_name());
-			in->set_signal(s_rhs);
-			s_rhs->add_port(in);
-			out->set_signal(s_lhs);
-			s_lhs->add_port(out);
-			netlist->add_gate(g);
-			g->set_parent(netlist);
+
+			if (s_rhs !=0){
+				// instantiate a buffer and setup inputs and outputs
+				ds_structural::Gate *g = workspace->get_gate("BUF_X1", 2);
+				//TODO Ask the library (workspace) for the port names
+				ds_structural::PortBit* in = g->find_port_by_name("A");
+				ds_structural::PortBit* out = g->find_port_by_name("Z");
+				g->set_instance_name("assign_" + s_lhs->get_instance_name() + "_" + s_rhs->get_instance_name());
+				in->set_signal(s_rhs);
+				s_rhs->add_port(in);
+				out->set_signal(s_lhs);
+				s_lhs->add_port(out);
+				netlist->add_gate(g);
+				g->set_parent(netlist);
+			}
+			else if (assignment.rhs == value_0){
+				s_lhs->set_value(ds_common::BIT_0);
+			} else if (assignment.rhs == value_1){
+				s_lhs->set_value(ds_common::BIT_1);
+			} else if (assignment.rhs == value_X){
+				s_lhs->set_value(ds_common::BIT_X);
+			} else {
+				BOOST_LOG_TRIVIAL(warning)  << "Assignment signals not found: " <<  assignment.lhs << " <= " << assignment.rhs << "*";
+			}
 		}
 	}
 	BOOST_LOG_TRIVIAL(trace) << "Assignments processed";

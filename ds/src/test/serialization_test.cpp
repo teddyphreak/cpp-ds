@@ -81,8 +81,11 @@ void serialization_test::serialize_netlist(const std::string& name) {
 	std::string file = path + "/files/" + name;
 	BOOST_LOG_TRIVIAL(info) << "Reading " << file;
 	ds_structural::NetList* n = ds_workspace::load_netlist("top", file);
+	BOOST_LOG_TRIVIAL(info) << "Checking netlist ... ";
 	BOOST_CHECK(n->check_netlist());
+	BOOST_LOG_TRIVIAL(info) << "Generating LG";
 	ds_lg::LeveledGraph* lg = n->get_sim_graph(lib);
+	BOOST_LOG_TRIVIAL(info) << "Sanity";
 	BOOST_CHECK(lg->sanity_check());
 
 	BOOST_LOG_TRIVIAL(info) << "Design: " << name << " imported";

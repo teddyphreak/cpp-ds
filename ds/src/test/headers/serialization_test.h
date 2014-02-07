@@ -24,8 +24,6 @@ namespace serialization_test{
 			netlist_to_test.push_back( "p45k_nan.v" );
 			netlist_to_test.push_back( "p100k_nan.v" );
 			netlist_to_test.push_back( "p141k_nan.v" );
-			netlist_to_test.push_back( "p239k_nan.v" );
-			netlist_to_test.push_back( "p259k_nan.v" );
 			netlist_to_test.push_back( "p267k_nan.v" );
 			netlist_to_test.push_back( "p269k_nan.v" );
 			netlist_to_test.push_back( "p279k_nan.v" );
@@ -36,8 +34,6 @@ namespace serialization_test{
 			pattern_to_test.push_back( "p45k" );
 			pattern_to_test.push_back( "p100k" );
 			pattern_to_test.push_back( "p141k" );
-			pattern_to_test.push_back( "p239k" );
-			pattern_to_test.push_back( "p259k" );
 			pattern_to_test.push_back( "p267k" );
 			pattern_to_test.push_back( "p269k" );
 			pattern_to_test.push_back( "p279k" );

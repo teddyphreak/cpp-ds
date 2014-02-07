@@ -357,6 +357,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 			}
 		}
 	}
+
 	// continue forward trace with gates not considered so far
 	while (!todo.empty()){
 		Gate *g = todo.top();
@@ -380,6 +381,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 				level_list.push_back(in);
 		}
 	}
+
 	// level gates: push them onto stack till a levelized node is found. Then calculate the levels for the nodes in between
 	for (V *lgn: level_list)
 	{
@@ -430,6 +432,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 	{
 		level_map[out->level]->insert(out);
 	}
+
 	// fill level map with traced nodes
 	for (std::map<std::string, Gate*>::iterator gi = trace.begin(); gi!=trace.end();gi++){
 		V *lgn = node_map[gi->second];
@@ -438,6 +441,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 
 		}
 	}
+
 	// add nodes in level order to the nodes container
 	for (int i=0;i<max_level+1;i++){
 		std::set<V*> *set = level_map[i];
@@ -448,6 +452,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::LeveledGraphBuilder* bui
 		}
 		delete set;
 	}
+
 	for  (int i=0;i<max_level+1;i++){
 		ds_lg::lg_node_container::iterator it = std::find_if(builder->get_nodes_begin(), builder->get_nodes_end(),
 				[&] (const V* n) { return n->level == i;});
@@ -758,6 +763,27 @@ ds_structural::NetList* ds_structural::load_netlist(const std::string& file, ds_
 		}
 	}
 	return nl;
+}
+
+std::string ds_structural::get_explicit_instantiation(ds_structural::Gate* g){
+	std::string instance = g->get_type() + "\t" + g->get_instance_name() + " ( ";
+	ds_structural::port_container ports;
+	const ds_structural::port_container* outputs = g->get_outputs();
+	const ds_structural::port_container* inputs = g->get_inputs();
+	ports.insert(ports.begin(), inputs->begin(), inputs->end());
+	ports.insert(ports.end(), outputs->begin(), outputs->end());
+	int num_ports = g->get_num_ports();
+	int ports_it = 0;
+	for (auto it=ports.begin();it!=ports.end();it++){
+		ports_it++;
+		const ds_structural::PortBit *pb = *it;
+		instance += "." + pb->get_instance_name() + "(" + pb->get_signal()->get_instance_name() +")";
+		if (ports_it < num_ports){
+			instance += ", ";
+		}
+	}
+	instance += " );";
+	return instance;
 }
 
 std::string ds_structural::get_implicit_instantiation(ds_structural::Gate* g){

@@ -162,8 +162,6 @@ namespace ds_library {
 					g->add_mapping(port_name, lgn_port_name);
 					lgn_port++;
 				}
-			//	ds_lg::LogicNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
-			//	g->set_lgn(n);
 			}
 		}
 		return g;
@@ -446,7 +444,7 @@ namespace ds_library {
 			ports =  name  % ',';
 			aggregate =   lit('[') >> int_ >> lit(':') >> int_ >> lit(']') >> name;
 			declaration = (aggregate | name ) [_val = _1];
-			assign = "assign" >>  ( name ) >> lit('=') >> ( name );
+			assign = "assign" >>  ( name ) >> lit('=') >> ( name |  b_constant);
 			instance = implicit_i | explicit_i;
 			implicit_i = name >> name >> lit('(') >> ports >> lit(')');
 			explicit_i = name >> name >> lit('(') >> binding % ',' >> lit(')');
