@@ -83,7 +83,7 @@ void trans_test::convert_sff_netlist(const std::string& name) {
 		scan_nl->dump_verilog_explicit(verilog);
 		verilog.close();
 		BOOST_LOG_TRIVIAL(info) << "done.";
-		ds_trans::write_test_procedures(name + "_dofile", name + "_test_proc", name + "_scan_group", sm, tp_slow, tp_fast, properties, name + "_patterns.wgl");
+		ds_trans::write_test_procedures(name + "_dofile", name + "_test_proc", name + "_scan_group", sm, tp_slow, tp_fast, properties, name + "_patterns.wgl", name + "_faults");
 		delete scan_nl;
 	}
 

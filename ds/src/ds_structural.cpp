@@ -766,7 +766,7 @@ ds_structural::NetList* ds_structural::load_netlist(const std::string& file, ds_
 }
 
 std::string ds_structural::get_explicit_instantiation(ds_structural::Gate* g){
-	std::string instance = g->get_type() + "\t" + g->get_instance_name() + " ( ";
+	std::string instance = g->get_type() + "\t" + ds_structural::escape_name(g->get_instance_name()) + " ( ";
 	ds_structural::port_container ports;
 	const ds_structural::port_container* outputs = g->get_outputs();
 	const ds_structural::port_container* inputs = g->get_inputs();
@@ -777,7 +777,7 @@ std::string ds_structural::get_explicit_instantiation(ds_structural::Gate* g){
 	for (auto it=ports.begin();it!=ports.end();it++){
 		ports_it++;
 		const ds_structural::PortBit *pb = *it;
-		instance += "." + pb->get_instance_name() + "(" + pb->get_signal()->get_instance_name() +")";
+		instance += "." + pb->get_instance_name() + "(" + ds_structural::escape_name(pb->get_signal()->get_instance_name()) +")";
 		if (ports_it < num_ports){
 			instance += ", ";
 		}
@@ -787,7 +787,7 @@ std::string ds_structural::get_explicit_instantiation(ds_structural::Gate* g){
 }
 
 std::string ds_structural::get_implicit_instantiation(ds_structural::Gate* g){
-	std::string instance = g->get_type() + "\t" + g->get_instance_name() + " ( ";
+	std::string instance = g->get_type() + "\t" + ds_structural::escape_name(g->get_instance_name()) + " ( ";
 	ds_structural::port_container ports;
 	const ds_structural::port_container* outputs = g->get_outputs();
 	const ds_structural::port_container* inputs = g->get_inputs();
@@ -798,7 +798,7 @@ std::string ds_structural::get_implicit_instantiation(ds_structural::Gate* g){
 	for (auto it=ports.begin();it!=ports.end();it++){
 		ports_it++;
 		const ds_structural::PortBit *pb = *it;
-		instance += pb->get_signal()->get_instance_name();
+		instance += ds_structural::escape_name(pb->get_signal()->get_instance_name());
 		if (ports_it < num_ports){
 			instance += ", ";
 		}
@@ -865,3 +865,9 @@ ds_structural::Gate::~Gate(){
 	}
 }
 
+std::string ds_structural::escape_name(const std::string& name){
+	std::size_t pos = name.find('/');
+	if (pos != std::string::npos)
+		return "\\" + name + " ";
+	return name;
+}

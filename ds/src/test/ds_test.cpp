@@ -40,11 +40,11 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //	lib_test::lib_ts *lib = new lib_test::lib_ts("lib_ts");
 //	test->add( lib );
 //
-//	pattern_test::pattern_ts *pattern = new pattern_test::pattern_ts("pattern_ts");
-//	test->add( pattern );
-
-	trans_test::trans_ts *trans = new trans_test::trans_ts("trans_ts");
-	test->add( trans );
+	pattern_test::pattern_ts *pattern = new pattern_test::pattern_ts("pattern_ts");
+   	test->add( pattern );
+//
+//	trans_test::trans_ts *trans = new trans_test::trans_ts("trans_ts");
+//	test->add( trans );
 
     return test;
 }

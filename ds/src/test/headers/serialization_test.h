@@ -31,15 +31,15 @@ namespace serialization_test{
 			netlist_to_test.push_back( "p295k_nan.v" );
 			netlist_to_test.push_back( "p330k_nan.v" );
 
-			pattern_to_test.push_back( "p45k" );
-			pattern_to_test.push_back( "p100k" );
-			pattern_to_test.push_back( "p141k" );
-			pattern_to_test.push_back( "p267k" );
-			pattern_to_test.push_back( "p269k" );
-			pattern_to_test.push_back( "p279k" );
-			pattern_to_test.push_back( "p286k" );
-			pattern_to_test.push_back( "p295k" );
-			pattern_to_test.push_back( "p330k" );
+//			pattern_to_test.push_back( "p45k" );
+//			pattern_to_test.push_back( "p100k" );
+//			pattern_to_test.push_back( "p141k" );
+//			pattern_to_test.push_back( "p267k" );
+//			pattern_to_test.push_back( "p269k" );
+//			pattern_to_test.push_back( "p279k" );
+//			pattern_to_test.push_back( "p286k" );
+//			pattern_to_test.push_back( "p295k" );
+//			pattern_to_test.push_back( "p330k" );
 
 			add( BOOST_PARAM_TEST_CASE( &serialize_netlist, netlist_to_test.begin(), netlist_to_test.end() ) );
 			add( BOOST_PARAM_TEST_CASE( &serialize_patterns, pattern_to_test.begin(), pattern_to_test.end() ) );

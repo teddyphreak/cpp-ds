@@ -87,7 +87,9 @@ void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_fil
 	std::string path = d?d:"";
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
+	BOOST_LOG_TRIVIAL(info) << "Circuit: " << design;
 	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, false);
+	BOOST_LOG_TRIVIAL(info) << "Pattern file loaded: " << pattern_file;
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
 	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 	lg->adapt(provider);

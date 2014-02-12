@@ -17,7 +17,7 @@ using namespace ds_workspace;
 using namespace ds_pattern;
 
 
-void pattern_test::wgl_import_test(std::string& name) {
+void pattern_test::wgl_combinational_test(std::string& name) {
 
 	const char* d = getenv("DS");
 	if (!d){
@@ -41,13 +41,20 @@ void pattern_test::wgl_import_test(std::string& name) {
 		spirit::qi::phrase_parse(begin, end, parser, spirit::ascii::space, rawPatterns);
 		input.close();
 
-		ds_pattern::PatternList pl(rawPatterns,false);
+		ds_pattern::CombinationalPatternList pl(rawPatterns,false);
 
-		BOOST_CHECK(rawPatterns.scan.size() == pl.get_pattern_count());
+		BOOST_CHECK(rawPatterns.cycles.size() == pl.get_vector_count());
 
-		for (std::size_t i=0;i<rawPatterns.scan.size();i++){
+		std::vector<std::string> rawData;
+		ds_pattern::combinational_port_data_extractor extrator(&rawData);
+		for ( ds_pattern::tester_cycle c: rawPatterns.cycles )
+		{
+			boost::apply_visitor(extrator, c);
+		}
 
-			std::string pattern = rawPatterns.scan[i];
+		for (std::size_t i=0;i<rawData.size();i++){
+
+			std::string pattern = rawData[i];
 
 			BOOST_CHECK(pattern.size() == pl.get_port_count());
 			for (std::size_t pIdx=0;pIdx<pattern.size();pIdx++){
@@ -102,5 +109,34 @@ void pattern_test::wgl_import_test(std::string& name) {
 		}
 	}
 }
+
+void pattern_test::wgl_transition_test(std::string& name) {
+
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	std::string path = d?d:"";
+	try {
+		std::string file = path + "/files/" + name;
+		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
+
+		ds_pattern::scan_data data;
+		bool parse = ds_pattern::parse_transition_wgl(file, data);
+		BOOST_CHECK(parse);
+		BOOST_LOG_TRIVIAL(info) << "WGL file parsed " << file;
+		ds_pattern::SequentialPatternList pl(data);
+		BOOST_LOG_TRIVIAL(info) << "Pattern list generated...";
+		BOOST_CHECK(data.cycles.size() == pl.get_vector_count());
+		ds_pattern::SequentialPatternProvider provider(pl);
+		BOOST_LOG_TRIVIAL(info) << "Pattern provider generated...";
+
+	}catch (boost::exception& e){
+			if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) ){
+				BOOST_LOG_TRIVIAL(error) << *mi;
+				std::cerr << "Error: " << *mi;
+			}
+		}
+	}
 
 

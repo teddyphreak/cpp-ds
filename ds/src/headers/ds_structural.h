@@ -381,6 +381,7 @@ namespace ds_structural {
 		virtual ~Gate();
 	};
 
+	std::string escape_name(const std::string& name);
 	std::string get_implicit_instantiation(ds_structural::Gate* g);
 	std::string get_explicit_instantiation(ds_structural::Gate* g);
 
@@ -398,7 +399,6 @@ namespace ds_structural {
 		int signal_counter;							//!< number of signals so far
 		signal_map_t own_signals;					//!< auxiliary signals
 		assignment_map_t assignment_map;
-		//ds_lg::LeveledGraph* lg;						//!< corresponding leveled graph instance
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
@@ -603,24 +603,24 @@ namespace ds_structural {
 			ds_structural::port_container all_ports;
 			all_ports.insert(all_ports.end(), inputs.begin(), inputs.end());
 			all_ports.insert(all_ports.end(), outputs.begin(), outputs.end());
-			sink << "module " << get_instance_name() << " (\n";
+			sink << "module " << escape_name(get_instance_name()) << " (\n";
 			auto it=all_ports.begin();
 			if (it!=all_ports.end()){
 				PortBit* first = *it++;
-				sink << first->get_instance_name();
+				sink << escape_name(first->get_instance_name());
 				for (;it!=all_ports.end();it++){
 					PortBit* pb = *it;
-					sink << ",\n" << pb->get_instance_name();
+					sink << ",\n" << escape_name(pb->get_instance_name());
 				}
 			}
 			sink << ");\n";
 			for (auto it=inputs.begin();it!=inputs.end();it++){
 				PortBit *pb = *it;
-				sink << "input\t" << pb->get_instance_name() << ";\n";
+				sink << "input\t" << escape_name(pb->get_instance_name()) << ";\n";
 			}
 			for (auto it=outputs.begin();it!=outputs.end();it++){
 				PortBit *pb = *it;
-				sink << "output\t" << pb->get_instance_name() << ";\n";
+				sink << "output\t" << escape_name(pb->get_instance_name()) << ";\n";
 			}
 			for (auto it=gates.begin();it!=gates.end();it++){
 				Gate *g = it->second;
