@@ -21,15 +21,15 @@ namespace serialization_test{
 	{
 		serialize_ts(const std::string& name):boost::unit_test::test_suite(name)
 		{
-			netlist_to_test.push_back( "p45k_nan.v" );
-			netlist_to_test.push_back( "p100k_nan.v" );
-			netlist_to_test.push_back( "p141k_nan.v" );
-			netlist_to_test.push_back( "p267k_nan.v" );
-			netlist_to_test.push_back( "p269k_nan.v" );
+//			netlist_to_test.push_back( "p45k_nan.v" );
+//			netlist_to_test.push_back( "p100k_nan.v" );
+//			netlist_to_test.push_back( "p141k_nan.v" );
+//			netlist_to_test.push_back( "p267k_nan.v" );
+//			netlist_to_test.push_back( "p269k_nan.v" );
 			netlist_to_test.push_back( "p279k_nan.v" );
-			netlist_to_test.push_back( "p286k_nan.v" );
-			netlist_to_test.push_back( "p295k_nan.v" );
-			netlist_to_test.push_back( "p330k_nan.v" );
+//			netlist_to_test.push_back( "p286k_nan.v" );
+//			netlist_to_test.push_back( "p295k_nan.v" );
+//			netlist_to_test.push_back( "p330k_nan.v" );
 
 //			pattern_to_test.push_back( "p45k" );
 //			pattern_to_test.push_back( "p100k" );

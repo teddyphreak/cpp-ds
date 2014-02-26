@@ -31,8 +31,8 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //	serialization_test::serialize_ts *serial = new serialization_test::serialize_ts("serialize_ts");
 //	test->add( serial );
 //
-//	sim_test::sim_ts *sim = new sim_test::sim_ts("sim_ts");
-//	test->add( sim );
+	sim_test::sim_ts *sim = new sim_test::sim_ts("sim_ts");
+	test->add( sim );
 //
 //	import_test::import_ts *import = new import_test::import_ts("import_ts");
 //	test->add( import );
@@ -40,8 +40,8 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //	lib_test::lib_ts *lib = new lib_test::lib_ts("lib_ts");
 //	test->add( lib );
 //
-	pattern_test::pattern_ts *pattern = new pattern_test::pattern_ts("pattern_ts");
-   	test->add( pattern );
+//	pattern_test::pattern_ts *pattern = new pattern_test::pattern_ts("pattern_ts");
+//  test->add( pattern );
 //
 //	trans_test::trans_ts *trans = new trans_test::trans_ts("trans_ts");
 //	test->add( trans );

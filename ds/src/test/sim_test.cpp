@@ -19,17 +19,17 @@
 
 void sim_test::test_sim(){
 	BOOST_LOG_TRIVIAL(info) << "Simulation Test...";
-	lg_sim_test("p45k.v", "p45k.wgl", "top");
-	lg_sim_test("p100k.v", "p100k.wgl", "top");
-	lg_sim_test("p141k.v", "p141k.wgl", "top");
-	lg_sim_test("p239k.v", "p239k.wgl", "top");
-	lg_sim_test("p259k.v", "p259k.wgl", "top");
-	lg_sim_test("p267k.v", "p267k.wgl", "top");
-	lg_sim_test("p269k.v", "p269k.wgl", "top");
-	lg_sim_test("p279k.v", "p279k.wgl", "top");
-	lg_sim_test("p286k.v", "p286k.wgl", "top");
-	lg_sim_test("p295k.v", "p295k.wgl", "top");
-	lg_sim_test("p330k.v", "p330k.wgl", "top");
+	lg_sim_test("p45k_nan.v", "p45k.wgl", "top");
+	lg_sim_test("p100k_nan.v", "p100k.wgl", "top");
+	lg_sim_test("p141k_nan.v", "p141k.wgl", "top");
+	lg_sim_test("p239k_nan.v", "p239k.wgl", "top");
+	lg_sim_test("p259k_nan.v", "p259k.wgl", "top");
+	lg_sim_test("p267k_nan.v", "p267k.wgl", "top");
+	lg_sim_test("p269k_nan.v", "p269k.wgl", "top");
+	lg_sim_test("p279k_nan.v", "p279k.wgl", "top");
+	lg_sim_test("p286k_nan.v", "p286k.wgl", "top");
+	lg_sim_test("p295k_nan.v", "p295k.wgl", "top");
+	lg_sim_test("p330k_nan.v", "p330k.wgl", "top");
 };
 
 void sim_test::test_fc(){
@@ -45,6 +45,32 @@ void sim_test::test_fc(){
 	fc_test("p286k.v", "p286k.dsp", "top");
 	fc_test("p295k.v", "p295k.dsp", "top");
 	fc_test("p330k.v", "p330k.dsp", "top");
+};
+
+void sim_test::test_tdf(){
+	BOOST_LOG_TRIVIAL(info) << "TDF Test...";
+	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_faults");
+	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
+	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
+	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
+	fc_tdf_test("p269k_nan_sff.v", "p269k_nan_patterns.wgl", "top", "p269k_nan_faults");
+	fc_tdf_test("p279k_nan_sff.v", "p279k_nan_patterns.wgl", "top", "p279k_nan_faults");
+	fc_tdf_test("p286k_nan_sff.v", "p286k_nan_patterns.wgl", "top", "p286k_nan_faults");
+	fc_tdf_test("p295k_nan_sff.v", "p295k_nan_patterns.wgl", "top", "p295k_nan_faults");
+	fc_tdf_test("p330k_nan_sff.v", "p330k_nan_patterns.wgl", "top", "p330k_nan_faults");
+};
+
+void sim_test::test_loc(){
+	BOOST_LOG_TRIVIAL(info) << "LOC Test";
+	lg_loc_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top");
+	lg_loc_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top");
+	lg_loc_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top");
+	lg_loc_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top");
+	lg_loc_test("p269k_nan_sff.v", "p269k_nan_patterns.wgl", "top");
+	lg_loc_test("p279k_nan_sff.v", "p279k_nan_patterns.wgl", "top");
+	lg_loc_test("p286k_nan_sff.v", "p286k_nan_patterns.wgl", "top");
+	lg_loc_test("p295k_nan_sff.v", "p295k_nan_patterns.wgl", "top");
+	lg_loc_test("p330k_nan_sff.v", "p330k_nan_patterns.wgl", "top");
 };
 
 void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
@@ -70,7 +96,7 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	BOOST_LOG_TRIVIAL(info) << "Calculating fault set...";
 	ds_faults::FaultList fl(nl);
 	int total_blocks = provider->num_blocks();
-	BOOST_LOG_TRIVIAL(info) << "Beginning fault coverage calculation with " << total_blocks << " ...";
+	BOOST_LOG_TRIVIAL(info) << "Beginning fault coverage calculation";
 
 	ds_simulation::run_combinational_fault_coverage(lg, &fl, provider);
 	double fc = fl.get_fc();
@@ -88,7 +114,7 @@ void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_fil
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
 	BOOST_LOG_TRIVIAL(info) << "Circuit: " << design;
-	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_pattern_blocks(pattern_file, false);
+	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_combinational_blocks(pattern_file, false);
 	BOOST_LOG_TRIVIAL(info) << "Pattern file loaded: " << pattern_file;
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
 	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
@@ -114,6 +140,81 @@ void sim_test::lg_sim_test(const std::string& design, const std::string& wgl_fil
 	}
 }
 
+void sim_test::lg_loc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
+	ds_library::Library *lib = ds_library::load_default_lib();
+	const char* d = getenv("DS");
+	std::string path = d?d:"";
+	std::string pattern_file = path + "/files/" + wgl_file;
+	std::string design_file = path + "/files/" + design;
+	BOOST_LOG_TRIVIAL(info) << "Circuit: " << design;
+	ds_pattern::SequentialPatternProvider* provider = ds_pattern::load_loc_blocks(pattern_file);
+	BOOST_LOG_TRIVIAL(info) << "Pattern file loaded: " << pattern_file;
+	ds_structural::NetList* nl = ds_workspace::load_netlist(top, design_file);
+	BOOST_LOG_TRIVIAL(info) << "Netlist created";
+	nl->define_clock("clk");
+	ds_lg::TLeveledGraph* lg = nl->get_loc_graph(lib);
+	BOOST_LOG_TRIVIAL(info) << "Leveled graph generated";
+	lg->adapt(provider);
 
+	std::size_t output_offset = provider->get_output_offset();
+	std::size_t scan_offset = provider->get_scan_offset();
+
+	while (provider->has_next()){
+
+		ds_pattern::SimPatternBlock *block = provider->next();
+		ds_pattern::SimPatternBlock spec(*block);
+
+		for (std::size_t idx=0;idx<provider->get_num_outputs();idx++){
+			int pos = output_offset + idx;
+			block->values[pos].v = 0L;
+			block->values[pos].x = 0L;
+		}
+
+		lg->sim(block);
+
+		for (std::size_t i=0;i<provider->get_num_outputs();i++){
+			int pos = output_offset + i;
+			BOOST_ASSERT((block->values[pos].v & ~spec.values[pos].x) == (spec.values[pos].v & ~spec.values[pos].x));
+		}
+		for (std::size_t i=0;i<provider->get_num_scan_cells();i++){
+			int pos = scan_offset + i;
+			BOOST_ASSERT((block->values[pos].v & ~spec.values[pos].x) == (spec.values[pos].v & ~spec.values[pos].x));
+		}
+	}
+}
+
+void sim_test::fc_tdf_test(const std::string& design, const std::string& wgl_file, const std::string& top, const std::string& faults){
+	ds_library::Library *lib = ds_library::load_default_lib();
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	BOOST_LOG_TRIVIAL(info) << "Circuit " << design;;
+	std::string path = d?d:"";
+	std::string pattern_file = path + "/files/" + wgl_file;
+	std::string design_file = path + "/files/" + design;
+	std::string fault_file = path + "/files/" + faults;
+
+	BOOST_LOG_TRIVIAL(info) << "Importing fault list: " << fault_file;
+	std::vector<ds_faults::fastscan_descriptor> descriptors;
+	ds_faults::read_fastscan_descriptors(fault_file, descriptors);
+	ds_faults::FaultList fl(descriptors.begin(), descriptors.end());
+	BOOST_LOG_TRIVIAL(info) << "Importing pattern file: " << pattern_file;
+	ds_pattern::SequentialPatternProvider* provider = ds_pattern::load_loc_blocks(pattern_file);
+	BOOST_LOG_TRIVIAL(info) << "Generating leveled graph";
+	ds_structural::NetList* nl = ds_workspace::load_netlist(top, design_file);
+	nl->define_clock("clk");
+	ds_lg::TLeveledGraph* lg = nl->get_loc_graph(lib);
+
+	int total_blocks = provider->num_blocks();
+	BOOST_LOG_TRIVIAL(info) << "Beginning fault coverage calculation";
+
+	ds_simulation::run_transition_fault_coverage(lg, &fl, provider);
+	double fc = fl.get_fc();
+	BOOST_LOG_TRIVIAL(info) << "Fault coverage: " << fc;
+	std::set<ds_faults::SAFaultDescriptor*> detected;
+	fl.get_detected_faults(detected);
+	BOOST_LOG_TRIVIAL(info) << "Detected faults: " << detected.size();
+}
 
 

@@ -17,12 +17,12 @@
 namespace ds_lg {
 
 	void LogicNode::hook_inputs(){
-		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
+		for (ds_lg::SimulationHook<LogicNode> *h : hooks){
 			lg_v64** input_address = get_input(h->get_hook_port());
 			if (input_address!=0){
 				lg_v64* p_port = *input_address;
 				if (p_port!=0){
-					int64 activation = h->hook(lg);
+					int64 activation = h->hook(resolver);
 					p_port->v ^= activation & ~p_port->x;
 				}
 			}
@@ -30,10 +30,10 @@ namespace ds_lg {
 	}
 
 	void LogicNode::hook_outputs(){
-		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
+		for (ds_lg::SimulationHook<LogicNode> *h : hooks){
 			lg_v64* p_port = get_output(h->get_hook_port());
 			if (p_port!=0){
-				int64 activation = h->hook(lg);
+				int64 activation = h->hook(resolver);
 				p_port->v ^= activation & ~p_port->x;
 			}
 		}
@@ -107,7 +107,7 @@ namespace ds_lg {
 		return 0;
 	}
 
-	lg_v64** LGState::get_input(const std::string& name) {
+	lg_v64** LogicState::get_input(const std::string& name) {
 		if (name == "d")return &d;
 		if (name == "cd")return &cd;
 		if (name == "rst")return &rst;
@@ -131,15 +131,15 @@ namespace ds_lg {
 
 	void Output::hook() {
 		sim();
-		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
-			o.v ^=  h->hook(lg) & ~o.x;
+		for (ds_lg::SimulationHook<LogicNode> *h : hooks){
+			o.v ^=  h->hook(resolver) & ~o.x;
 		}
 	}
 
 	void Input::hook() {
 		sim();
-		for (ds_faults::SimulationHook<LogicNode> *h : hooks){
-			o.v ^=  h->hook(lg) & ~o.x;
+		for (ds_lg::SimulationHook<LogicNode> *h : hooks){
+			o.v ^=  h->hook(resolver) & ~o.x;
 		}
 	}
 
@@ -353,41 +353,7 @@ namespace ds_lg {
 		delete [] vi;
 	}
 
-	bool LeveledGraph::sanity_check(){
-		bool c = true;
-		if (nodes.size() <= 0){
-			c = false;
-		}
-		for (LogicNode *n: nodes)
-		{
-			if (n->level >= num_levels){
-				c = false;
-				BOOST_LOG_TRIVIAL(error) << "level " << n->level << " > " << num_levels;
-			}
-
-			for (ds_lg::LogicNode *o: n->outputs)
-			{
-				if (!o->has_state())
-					if (n->level >= o->level)
-						c = false;
-			}
-		}
-
-		for (int i=0;i<num_levels;i++){
-			unsigned int cnt = 0;
-			std::for_each(nodes.begin(), nodes.end(),
-				[&] (LogicNode* n) { if (n->level == i) cnt++;}
-			);
-			if (cnt != level_width[i]){
-				c = false;
-				BOOST_LOG_TRIVIAL(error) << "Inconsistent level (" << i <<") size: "<< cnt << "!=" << level_width[i];
-			}
-		}
-
-		return c;
-	}
-
-	void LGState::hook() {
+	void LogicState::hook() {
 		lg_v64 *sd = d;
 		lg_v64 vd = *d;
 		d = &vd;
@@ -413,6 +379,140 @@ namespace ds_lg {
 		load_n = sload_n;
 	}
 
+	driver_v64** TNode1I::get_input(const std::string& name) {
+		if (name == "a")return &a;
+		return 0;
+	}
+
+	driver_v64** TNode2I::get_input(const std::string& name) {
+		if (name == "a")return &a;
+		if (name == "b")return &b;
+		return 0;
+	}
+
+	driver_v64** TNode3I::get_input(const std::string& name) {
+		if (name == "a")return &a;
+		if (name == "b")return &b;
+		if (name == "c")return &c;
+		return 0;
+	}
+
+	driver_v64** TState::get_input(const std::string& name) {
+		if (name == "d")return &d;
+		if (name == "cd")return &cd;
+		if (name == "rst")return &rst;
+		if (name == "rst_n")return &rst_n;
+		if (name == "load")return &load;
+		if (name == "load_n")return &load_n;
+		if (name == "si")return &si;
+		if (name == "se")return &se;
+		return 0;
+	}
+
+	void TOutput::hook() {
+		sim();
+		for (ds_lg::SimulationHook<TNode> *h : hooks){
+			o.value.v ^=  h->hook(resolver) & ~o.value.x;
+		}
+	}
+
+	void TInput::hook() {
+		sim();
+		for (ds_lg::SimulationHook<TNode> *h : hooks){
+			o.value.v ^=  h->hook(resolver) & ~o.value.x;
+		}
+	}
+
+	void TNode1I::hook() {
+		driver_v64 *sa = a;
+		driver_v64 va = *a;
+		a = &va;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+	}
+
+	void TNode2I::hook() {
+		driver_v64 *sa = a;
+		driver_v64 va = *a;
+		a = &va;
+		driver_v64 *sb = b;
+		driver_v64 vb = *b;
+		b = &vb;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+	}
+
+	void TNode3I::hook() {
+		driver_v64 *sa = a;
+		driver_v64 va = *a;
+		a = &va;
+		driver_v64 *sb = b;
+		driver_v64 vb = *b;
+		b = &vb;
+		driver_v64 *sc = c;
+		driver_v64 vc = *c;
+		c = &vc;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		a = sa;
+		b = sb;
+		c = sc;
+	}
+
+	void TState::hook() {
+		driver_v64 *sd = d;
+		driver_v64 vd = *d;
+		d = &vd;
+		driver_v64 *srst = rst;
+		driver_v64 vrst = *rst;
+		rst = &vrst;
+		driver_v64 *srst_n = rst_n;
+		driver_v64 vrst_n = *rst_n;
+		rst_n = &vrst_n;
+		driver_v64 *sload = load;
+		driver_v64 vload = *load;
+		load = &vload;
+		driver_v64 *sload_n = load_n;
+		driver_v64 vload_n = *load_n;
+		load_n = &vload_n;
+		hook_inputs();
+		sim();
+		hook_outputs();
+		d = sd;
+		rst = srst;
+		rst_n = srst_n;
+		load = sload;
+		load_n = sload_n;
+	}
+
+	void TNode::hook_inputs(){
+		for (ds_lg::SimulationHook<TNode> *h : hooks){
+			driver_v64** input_address = get_input(h->get_hook_port());
+			if (input_address!=0){
+				driver_v64* p_port = *input_address;
+				if (p_port!=0){
+					int64 activation = h->hook(resolver);
+					p_port->value.v ^= activation & ~p_port->value.x;
+				}
+			}
+		}
+	}
+
+	void TNode::hook_outputs(){
+		for (ds_lg::SimulationHook<TNode> *h : hooks){
+			driver_v64* p_port = get_output(h->get_hook_port());
+			if (p_port!=0){
+				int64 activation = h->hook(resolver);
+				p_port->value.v ^= activation & ~p_port->value.x;
+			}
+		}
+	}
 
 	void LeveledGraph::adapt(const ds_pattern::CombinationalPatternAdapter* adapter){
 
@@ -435,109 +535,32 @@ namespace ds_lg {
 		}
 	}
 
-
-	void LeveledGraph::sim(ds_pattern::SimPatternBlock *pb){
-		pattern_block = pb;
-		//propagates events from in level order from inputs to outputs
-		for (auto it=nodes.begin();it!=nodes.end();it++){
-			LogicNode *n = *it;
-			n->propagate(false);
-			n->mark();
+	void TLeveledGraph::adapt(const ds_pattern::SequentialPatternAdapter* adapter){
+		// prepare input for simulation: set pattern block and offset
+		for (TInput* in:inputs){
+			in->set_pattern_block(&pattern_block);
+			std::string name = in->get_name();
+			std::string port_name = name.substr(name.find('/') + 1);
+			std::size_t offset = adapter->get_port_offset(port_name);
+			in->set_offset(offset);
+			in->set_vector_offset(&vector_offset);
 		}
-		//inject hooks
-		for (ds_faults::SimulationHook<LogicNode>* h: hooks){
-			LogicNode *node = h->get_hook_node(this);
-			push_node(node);
+		// prepare outputs for simulation: create observers and attach them to outputs
+		for (TOutput* out:outputs){
+			std::string name = out->get_name();
+			std::string port_name = name.substr(name.find('/') + 1);
+			std::size_t offset = adapter->get_port_offset(port_name);
+			out->remove_monitors();
+			TOutputObserver* observer= new TOutputObserver(offset, &pattern_block, &vector_offset);
+			out->add_monitor(observer);
 		}
-		sim_intermediate();
+		for (TState* reg:registers){
+			std::string name = reg->get_name();
+			std::string port_name = name.substr(name.find('/') + 1);
+			std::size_t offset = adapter->get_scan_offset(port_name);
+			reg->set_pattern_block(&pattern_block);
+			reg->set_offset(offset);
+		}
 	}
-
-	void LeveledGraph::sim_intermediate(){
-		std::set<LogicNode*> set;
-		for (int i=0;i<num_levels;i++){
-			lg_node_container* level = simulation[i];
-			iteration++;
-			for (auto it=level->begin();it!=level->end();it++){
-				LogicNode *n = *it;
-				if (n->propagate(true)){
-					for (ds_lg::LogicNode *o : n->outputs){
-						auto s = set.find(o);
-						if (s==set.end()){
-							push_node(o);
-							set.insert(o);
-						}
-					}
-				}
-			}
-		}
-		for (int i=0;i<num_levels;i++){
-			lg_node_container* level = simulation[i];
-			for (auto it=level->begin();it!=level->end();it++){
-				LogicNode *n = *it;
-				n->rollback();
-			}
-			level->clear();
-		}
-
-	}
-
-	ds_common::int64 LeveledGraph::propagate_to_check_point(ds_faults::SimulationHook<LogicNode> *h){
-		LogicNode *n = h->get_hook_node(this);
-		n->add_hook(h);
-		LogicNode* node = get_check_point(n);
-		lg_v64 ff = node->get_mark();
-		std::vector<LogicNode*> path;
-		path.push_back(n);
-		bool p = n->propagate(true);
-		n->remove_hook(h);
-		if (p)
-			while (n!=node){
-				n = n->outputs[0];
-				path.push_back(n);
-				if (!n->propagate(true))
-					break;
-			}
-		lg_v64 faulty = n->peek();
-		for (LogicNode *p:path){
-			p->rollback();
-		}
-		if (n!=node)
-			return 0;
-
-		ds_common::int64 result = ~ff.x & ~faulty.x & (ff.v ^ faulty.v);
-		return result;
-	}
-
-	LogicNode* LeveledGraph::get_check_point(LogicNode* node){
-		LogicNode *fo = node;
-		if (fo->outputs.size()!=0){
-			while (fo->outputs.size()==1){
-				fo = fo->outputs[0];
-			}
-		}
-		return fo;
-	}
-
-	void LeveledGraph::add_hook(ds_faults::SimulationHook<LogicNode>* hook){
-		hooks.push_back(hook);
-		LogicNode *node = hook->get_hook_node(this);
-		node->add_hook(hook);
-		push_node(node);
-	};
-
-
-	void LeveledGraph::clear_hooks(){
-		for (auto it=hooks.begin();it!=hooks.end();it++){
-			ds_faults::SimulationHook<LogicNode> *hook = *it;
-			LogicNode *node = hook->get_hook_node(this);
-			node->remove_hooks();
-		}
-		hooks.clear();
-	}
-
-	void LeveledGraph::clear_hook(ds_faults::SimulationHook<LogicNode>* hook){
-		hooks.remove(hook);
-		LogicNode *node = hook->get_hook_node(this);
-		node->remove_hook(hook);
-	};
 }
+

@@ -19,14 +19,14 @@ void trans_test::convert_sff_netlist(const std::string& name) {
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
 	std::string path = d?d:"";
-	std::string d_name = path + "/files/" + name + ".v.dsn";
+	std::string d_name = path + "/files/" + name + ".v";
 	std::string scan_map_file = path + "/files/" + name + ".chain_info";
 	std::string dump_file = path + "/files/" + name +"_sff"+ ".v";
 
 
-	ds_workspace::Workspace *wp = ds_workspace::Workspace::get_workspace();
+	ds_library::load_default_lib();
 	BOOST_LOG_TRIVIAL(info) << "Reading netlist " << d_name;
-	ds_structural::NetList* nl = ds_structural::load_netlist(d_name, wp);
+	ds_structural::NetList* nl = ds_workspace::load_netlist("top",d_name);
 	BOOST_LOG_TRIVIAL(info) << "Reading scan map " << scan_map_file;
 	ds_structural::CombinationalScanMap *sm = ds_structural::get_combinational_scan_map(scan_map_file);
 
@@ -88,4 +88,25 @@ void trans_test::convert_sff_netlist(const std::string& name) {
 	}
 
 	delete nl;
+}
+
+void trans_test::fix_nxp_netlist(const std::string& name) {
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	std::string path = d?d:"";
+	std::string d_name = path + "/files/" + name + ".v";
+	std::string dump_file = path + "/files/" + name +"_fix"+ ".v";
+
+	ds_library::load_default_lib();
+	BOOST_LOG_TRIVIAL(info) << "Reading netlist " << d_name;
+	ds_structural::NetList* nl = ds_workspace::load_netlist("top", d_name);
+	ds_trans::fix_nxp(nl);
+	BOOST_CHECK(nl->check_netlist());
+	std::ofstream verilog(dump_file);
+	nl->dump_verilog_implicit(verilog);
+	verilog.close();
+	delete nl;
+
 }

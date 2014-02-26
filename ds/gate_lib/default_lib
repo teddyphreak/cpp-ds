@@ -113,3 +113,4 @@ BUF_X8,buf,1,Z@o,1,A@a
 MUX2_X1,mux2,1,Z@o,3,A@a,B@b,S@c
 MUX2_X2,mux2,1,Z@o,3,A@a,B@b,S@c
 TBUF_X2,and2,1,Z@o,2,A@a,EN@b
+SDFFR_X1,FD2,1,Q@q,5,D@d,CK@cd,SI@si,SE@se,RN@rst

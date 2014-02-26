@@ -540,6 +540,7 @@ namespace ds_pattern {
 
 	class SequentialPatternAdapter {
 	public:
+		virtual int get_port_offset(const std::string& name) const = 0;
 		virtual int get_port_offset(const std::size_t& vector, const std::string& name) const = 0;
 		virtual int get_scan_offset(const std::string& name) const = 0;
 		virtual std::string get_name(const int& idx) const = 0;
@@ -640,24 +641,6 @@ namespace ds_pattern {
 	 * convenience functions to load a pattern set
 	 */
 
-	/*!
-	 * loads an intermediate representation of the pattern set
-	 * @param file path to the wgl file
-	 * @param discard_x true if compatible patterns are discarded
-	 *
-	 */
-	ds_pattern::CombinationalPatternList* parse_combinational_wgl(const std::string& file, bool compact=true);
-
-	/*!
-	 * loads a combinational pattern provider ready for simulation
-	 * @param file path to the wgl file
-	 * @param discard_x true if compatible patterns are discarded
-	 *
-	 */
-	ds_pattern::CombinationalPatternProvider* load_pattern_blocks(const std::string& file, bool compact=true);
-
-	bool parse_transition_wgl(const std::string& file, ds_pattern::scan_data& rawPatterns);
-
 	class SequentialPatternList : public CombinationalPatternList{
 	protected:
 		std::vector<std::vector<std::string> > cell_order;
@@ -700,8 +683,15 @@ public:
 		SequentialPatternProvider (const SequentialPatternList& pl);
 
 		virtual int get_port_offset(const std::size_t& vector, const std::string& name) const;
+		virtual int get_port_offset(const std::string& name) const;
 		virtual int get_scan_offset(const std::string& name) const;
 		virtual std::string get_name(const int& idx) const;
+
+		virtual unsigned int get_num_inputs() const {return num_inputs;}
+		virtual unsigned int get_num_outputs() const {return num_outputs;}
+		virtual unsigned int get_output_offset() const {return 2*num_inputs + num_outputs;}
+		virtual unsigned int get_num_scan_cells() const {return cells.size();}
+		virtual unsigned int get_scan_offset() const {return 2*(num_inputs + num_outputs);}
 
 		virtual bool has_next() const {return blockIndex != values.size();}
 		virtual void reset() {blockIndex = 0;}
@@ -711,8 +701,6 @@ public:
 		virtual SimPatternBlock& get_block(unsigned int idx) { return values[idx]; };
 
 	private:
-
-		const int VECTOR_NUMBER = 2;
 
 		unsigned int blockIndex;
 		unsigned int output_offset;
@@ -735,6 +723,25 @@ public:
 			ar & cells;
 		}
 	};
+
+	/*!
+	 * loads an intermediate representation of the pattern set
+	 * @param file path to the wgl file
+	 * @param discard_x true if compatible patterns are discarded
+	 *
+	 */
+	ds_pattern::CombinationalPatternList* parse_combinational_wgl(const std::string& file, bool compact=true);
+	/*!
+	 * loads a combinational pattern provider ready for simulation
+	 * @param file path to the wgl file
+	 * @param discard_x true if compatible patterns are discarded
+	 *
+	 */
+	ds_pattern::CombinationalPatternProvider* load_combinational_blocks(const std::string& file, bool compact=true);
+
+	ds_pattern::SequentialPatternProvider* load_loc_blocks(const std::string& file);
+
+	bool parse_transition_wgl(const std::string& file, ds_pattern::scan_data& rawPatterns);
 }
 
 

@@ -32,7 +32,7 @@ namespace pattern_test {
 			combinational.push_back( "p286k.wgl" );
 			combinational.push_back( "p295k.wgl" );
 			combinational.push_back( "p30k.wgl" );
-	       // add( BOOST_PARAM_TEST_CASE( &wgl_combinational_test, combinational.begin(), combinational.end() ) );
+	        //add( BOOST_PARAM_TEST_CASE( &wgl_combinational_test, combinational.begin(), combinational.end() ) );
 
 
 			transition.push_back( "p45k_nan_patterns.wgl" );

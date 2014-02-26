@@ -27,7 +27,7 @@ void pattern_test::wgl_combinational_test(std::string& name) {
 	try {
 		std::string file = path + "/files/" + name;
 		BOOST_LOG_TRIVIAL(info) << "... importing " << file;
-		ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_pattern_blocks(file, false);
+		ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_combinational_blocks(file, false);
 
 		namespace spirit = boost::spirit;
 		std::ifstream input(file.c_str());

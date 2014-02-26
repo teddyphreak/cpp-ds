@@ -57,8 +57,11 @@ namespace ds_library {
 	typedef std::map<std::string, ds_structural::Gate*> gate_map_t;
 	typedef std::map<std::string, std::string> prototype_map_t;
 	typedef std::map<std::string, ds_lg::LogicNode*> lgn_map_t;
+	typedef std::map<std::string, ds_lg::LogicState*> lgn_register_map_t;
 	typedef std::map<ds_structural::Gate*, ds_lg::LogicNode*> node_map_t;
 	typedef std::map<std::string, ds_library::LogicFunction> type_map_t;
+	typedef std::map<std::string, ds_lg::TNode*>  lgn_tmap_t;
+	typedef std::map<std::string, ds_lg::TState*> lgn_tregister_map_t;
 
 	const std::string value_0 = "0";	//!< constant '0'
 	const std::string value_1 = "1";	//!< constant '1'
@@ -121,6 +124,55 @@ namespace ds_library {
 			bool invert = inversion.find(name)->second;
 			ds_lg::LogicNode *n = new ds_lg::LGNodeArr(name, ports-1, func, invert);
 			return n;
+		}
+		return 0;
+	}
+
+	ds_lg::LogicState* get_register_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				std::string reg_name = prototype_map[name];
+				ds_lg::LogicState *s = register_prototypes[reg_name];
+				if (s!=0){
+					ds_lg::LogicState *copy = s->clone_register();
+					return copy;
+				}
+			}
+		}
+		return 0;
+	}
+
+	ds_lg::TNode* get_t_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				std::string lgn_name = prototype_map[name];
+				ds_lg::TNode *n = tprototypes[lgn_name];
+				ds_lg::TNode *copy = n->clone();
+				return copy;
+			}
+		}
+		return 0;
+	}
+
+	ds_lg::TState* get_t_register_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				std::string reg_name = prototype_map[name];
+				auto it = register_prototypes.find(reg_name);
+				if (it!=register_prototypes.end()){
+					ds_lg::TState *s = tregister_prototypes[reg_name];
+					ds_lg::TState *copy = s->clone_register();
+					return copy;
+				} else {
+					return 0;
+				}
+			}
 		}
 		return 0;
 	}
@@ -196,12 +248,15 @@ namespace ds_library {
 	virtual ~Library(){close();}
 
 	protected:
-		gate_map_t gate_map; 		//!< available gates in the library
-		lgn_map_t prototypes;		//!< simulation primitives
-		type_map_t types;			//!< boolean logic implemented by each function
-		function_map functions;		//!< evaluation functions of 2 operands
-		inversion_map inversion;	//!< true when the function entry is to be complemented
-		prototype_map_t prototype_map; //!<maps gate names to prototype names
+		gate_map_t gate_map; 						//!< available gates in the library
+		lgn_map_t prototypes;						//!< simulation primitives
+		lgn_register_map_t register_prototypes;		//!< simulation primitives
+		lgn_tmap_t tprototypes;						//!< simulation primitives
+		lgn_tregister_map_t tregister_prototypes;		//!< simulation primitives
+		type_map_t types;							//!< boolean logic implemented by each function
+		function_map functions;						//!< evaluation functions of 2 operands
+		inversion_map inversion;					//!< true when the function entry is to be complemented
+		prototype_map_t prototype_map; 				//!<maps gate names to prototype names
 
 
 		/*!

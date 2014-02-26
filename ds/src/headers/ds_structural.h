@@ -32,8 +32,12 @@
 
 namespace ds_lg {
 	class LogicNode;
+
+	template<class N, class R, class I, class O, class V>
+	class GenericLeveledGraph;
+
 	class LeveledGraph;
-	class LeveledGraphBuilder;
+	class TLeveledGraph;
 	class Input;
 	class Output;
 }
@@ -61,6 +65,7 @@ namespace ds_structural {
 	typedef std::map<std::string, Signal*> signal_map_t; //!< signal container indexed by signal name
 	typedef std::list<ds_structural::PortBit*> sp_container; //!< holds pointers to ports used in signals
 	typedef std::map<std::string, std::string> assignment_map_t; //!< TBD
+	typedef std::vector<Signal*> signal_container;
 
 	/*!
 	 * defines the port type of any port
@@ -210,6 +215,16 @@ namespace ds_structural {
 		 * returns the number of ports connected to this signal
 		 */
 		int count_ports(){return ports.size();}
+
+		int count_output_ports() const {
+			int outputs = 0;
+			for (ds_structural::PortBit* p: ports){
+				if (p->get_type() == DIR_OUT || p->get_type() == DIR_INOUT){
+					outputs++;
+				}
+			}
+			return outputs;
+		}
 		/*!
 		 * true if this signal has an initial value for simulation different from "undefined" @sa ds_common::Value
 		 */
@@ -243,6 +258,7 @@ namespace ds_structural {
 		std::string type; 			//!< gate type
 		port_container inputs;		//!< input ports
 		port_container outputs;		//!< output ports
+		port_container inouts;		//!< input ports
 		function_map_t mappings;	//!< port mappings (Gate->LGNode)
 		ds_lg::LogicNode* lgn;		//!< corresponding simulation LogicNode
 		Gate* parent;				//!< parent gate or netlist
@@ -337,8 +353,10 @@ namespace ds_structural {
 		void add_port(PortBit * const pb){
 			if (pb->get_type() == DIR_IN)
 				inputs.push_back(pb);
-			else
+			else if (pb->get_type() == DIR_OUT)
 				outputs.push_back(pb);
+			else
+				inouts.push_back(pb);
 		}
 		/*!
 		* removes a port from the structure of this gate.
@@ -399,6 +417,7 @@ namespace ds_structural {
 		int signal_counter;							//!< number of signals so far
 		signal_map_t own_signals;					//!< auxiliary signals
 		assignment_map_t assignment_map;
+		signal_container clocks;
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version) {
@@ -408,6 +427,7 @@ namespace ds_structural {
 			ar & own_signals;
 			ar & gates;
 		    ar & assignment_map;
+		    ar & clocks;
 		}
 		/*!
 		 * trace forward the receivers of a port and connect simulation primitives.
@@ -521,20 +541,15 @@ namespace ds_structural {
 		 */
 		ds_lg::LeveledGraph* get_sim_graph(ds_library::Library *lib);
 		/*!
-		 * detaches the current leveled graph and allocates another leveled graph instance
-		 * @return
-		 */
-		//ds_lg::LeveledGraph* clone_sim_graph();
-		/*!
 		 * constructs a leveled graph. It makes use of the ds_lg::LeveledGraphBuilder to build the graph incrementally.
 		 * @param builder resulting leveled graph
 		 * @param node_map Node map for easy lookup between gates and simulation nodes
 		 * @param input_prototype simulation input nodes are cloned from this instance
 		 * @param output_prototype simulation outputs nodes are cloned from this interface
 		 */
-		template<class V>
-		void build_leveled_graph(ds_lg::LeveledGraphBuilder* builder, std::map<Gate*, V*>& node_map,
-				const ds_lg::Input& input_prototype, const ds_lg::Output& output_prototype);
+		template<class N, class R, class I, class O, class V>
+		void build_leveled_graph(ds_lg::GenericLeveledGraph<N,R,I,O,V>* builder, std::map<Gate*, N*>& node_map,
+				std::map<Gate*, R*>& register_map, const I& input_prototype, const O& output_prototype);
 		/*!
 		 * adds an assignment to the circuit representation ('<=' in vhdl or 'assign' in verilog)
 		 * @param lhs left hand side of assignment
@@ -553,7 +568,8 @@ namespace ds_structural {
 		 * stores all gate pointers in this netlist into the specified container
 		 * @param container array where gates are stored
 		 */
-		void get_gates(std::vector<Gate*>& container) const {
+		template<typename Container>
+		void get_gates(Container& container) const {
 			for (auto it= gates.begin();it!=gates.end();it++){
 				Gate* g = it->second;
 				container.push_back(g);
@@ -569,6 +585,25 @@ namespace ds_structural {
 				container.push_back(s);
 			}
 		}
+		bool define_clock(const std::string& clk_name){
+			Signal* s = find_signal(clk_name);
+			if (s!=0){
+				clocks.push_back(s);
+				return true;
+			}
+			return false;
+		}
+		void remove_clock(const std::string& clk_name){
+			Signal* s = find_signal(name);
+			if (s!=0){
+				auto it = std::find(clocks.begin(), clocks.end(), s);
+				if (it != clocks.end()){
+					clocks.erase(it);
+				}
+			}
+		}
+
+		ds_lg::TLeveledGraph* get_loc_graph(ds_library::Library *lib);
 		/*!
 		 * netlist destructor. It deletes its internal signals and gates
 		 */
@@ -622,12 +657,27 @@ namespace ds_structural {
 				PortBit *pb = *it;
 				sink << "output\t" << escape_name(pb->get_instance_name()) << ";\n";
 			}
+			for (auto it=signals.begin();it!=signals.end();it++){
+				Signal *s = it->second;
+				if (find_port_by_name(s->get_instance_name())==0){
+					sink << "wire\t" << s->get_instance_name() << ";\n";
+				}
+			}
 			for (auto it=gates.begin();it!=gates.end();it++){
 				Gate *g = it->second;
 				if (verilog_ex){
 					sink << ds_structural::get_explicit_instantiation(g) << std::endl;
 				} else {
 					sink << ds_structural::get_implicit_instantiation(g) << std::endl;
+				}
+			}
+			for (auto it=signals.begin();it!=signals.end();it++){
+				Signal *s = it->second;
+				if (s->get_fixed_value() != ds_common::BIT_UD){
+					std::string v = "1'b0";
+					if (s->get_fixed_value() != ds_common::BIT_1)
+						v = "1'b1";
+					sink << "assign " << s->get_instance_name() << " = " << v << ";\n";
 				}
 			}
 			sink << "endmodule";

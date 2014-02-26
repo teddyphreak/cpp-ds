@@ -13,13 +13,10 @@
 #include "ds_pattern.h"
 #include <boost/log/trivial.hpp>
 #include <vector>
+#include <unordered_map>
 
 
 namespace ds_faults {
-
-	template<class T>
-	class SimulationHook;
-
 	struct SAFaultDescriptor;
 }
 
@@ -91,19 +88,20 @@ namespace ds_lg {
 	/*!
 	 * interface to observe any node simulation event.
 	 */
+	template<class T>
 	class Monitor {
 	public:
 		/*!
 		 * derived classes extend this method to log any interesting simulation event
 		 * @param v current simulation value
 		 */
-		virtual void observe(const lg_v64& v) = 0;
+		virtual void observe(const T& v) = 0;
 	};
 
 	/*!
 	 * concrete class to capture the circuit's outputs in a pattern block
 	 */
-	class OutputObserver : public Monitor {
+	class OutputObserver : public Monitor<lg_v64> {
 	public:
 		std::size_t offset;					//!< output offset in the pattern block
 		ds_pattern::SimPatternBlock** pb;	//!< simulation pattern block
@@ -124,14 +122,37 @@ namespace ds_lg {
 			(*pb)->values[offset].x = v.x;
 		}
 	};
-
-	typedef std::vector<Monitor*> monitor_container;
-
+	template<class T>
+	class Resolver {
+	public:
+		virtual T* get_node(const std::string& name) const=0;
+		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const=0;
+	};
 	/*!
 	 * primitive node for logic simulation. It holds references to its input and output nodes.
 	 * It holds the level assigned to the node and a reference to its equivalent gate in the netlist.
 	 * A node may be an 'endpoint' if simulation events are not propagated to its output nodes
 	 */
+	template<class T>
+	class SimulationHook{
+	public:
+		/*!
+		 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
+		 * @return 1 in bit position i if fault is active in slot i
+		 */
+	virtual ds_lg::int64 hook(ds_lg::Resolver<T> *res) const=0;
+	/*!
+	 * returns the port name in the leveled graph node where the fault is inserted
+	 * @return
+	 */
+	virtual std::string get_hook_port() const=0;
+	/*!
+	 * returns the graph node that owns this hook. This is the node whose behavior is affected by this hook
+	 * @return
+	 */
+	virtual T* get_hook_node(ds_lg::Resolver<T> *res) const=0;
+	};
+
 	template <class T, class V>
 	class LGNode {
 	public:
@@ -139,7 +160,7 @@ namespace ds_lg {
 		ds_structural::Gate *gate;							//!< equivalent gate in netlist
 		std::vector<V*> outputs;							//!< output nodes
 		std::vector<V*> inputs;								//!< input nodes
-		std::list<ds_faults::SimulationHook<V>*> hooks;
+		std::list<SimulationHook<V>*> hooks;
 		/*!
 		 * initializes public members. By default the node is not an endpoint.
 		 * @param t node type
@@ -168,8 +189,8 @@ namespace ds_lg {
 		 * apply all registered observers
 		 */
 		void observe(){
-			for (monitor_container::iterator it = monitors.begin();it!=monitors.end();it++){
-				Monitor *m = *it;
+			for (auto it = monitors.begin();it!=monitors.end();it++){
+				Monitor<T> *m = *it;
 				m->observe(o);		// log any simulation events
 			}
 		}
@@ -185,12 +206,6 @@ namespace ds_lg {
 		 * @return pointer to this node's output primitive value
 		 */
 		virtual T* get_output(const std::string& name){if (name=="o")return &o; return 0;};
-		/*!
-		 * Simulation primitives are created according to the prototype design pattern.
-		 * Derived classes implement this method to replicate the node's structure and behavior
-		 * @return a newly allocated node instance
-		 */
-		virtual LogicNode* clone() const=0;
 		/*!
 		 * Virtual destructor
 		 */
@@ -214,11 +229,11 @@ namespace ds_lg {
 		 * registers a monitor that is called on each simulation event
 		 * @param m monitor to observe this node
 		 */
-		void add_monitor(Monitor* m){monitors.push_back(m);}
+		void add_monitor(Monitor<T>* m){monitors.push_back(m);}
 		/*!
 		 * removes the provided monitor from the monitor container
 		 */
-		void remove_monitor(Monitor* m){
+		void remove_monitor(Monitor<T>* m){
 			auto m_it =std::find(monitors.begin(), monitors.end(), m);
 			monitors.erase(m_it);
 		}
@@ -251,18 +266,18 @@ namespace ds_lg {
 		 * sets an internal pointer to the encompasing leveled graph
 		 * @param graph
 		 */
-		void set_leveled_graph(LeveledGraph *graph) {
-			lg = graph;
+		void set_resolver(Resolver<V>* res) {
+			resolver = res;
 		}
 		/*!
 		 * adds a hook to be executed during the propagate method.
 		 * This hook may or may not be registered in the encompassing leveled graph
 		 * @param h
 		 */
-		void add_hook(ds_faults::SimulationHook<V>* h){
+		void add_hook(SimulationHook<V>* h){
 			hooks.push_back(h);
 		}
-		void remove_hook(ds_faults::SimulationHook<V>* h){
+		void remove_hook(SimulationHook<V>* h){
 			auto it = std::find(hooks.begin(), hooks.end(), h);
 			if (it!=hooks.end())
 				hooks.remove(h);
@@ -274,11 +289,12 @@ namespace ds_lg {
 			hooks.clear();
 		}
 	protected:
+		typedef typename std::vector<Monitor<T>*> monitor_container;
 		T o; 						//!< node output
 		bool endpoint;					//!< true if this node is an endpoint
 		std::string type;				//!< node type
 		monitor_container monitors;		//!< monitor container
-		LeveledGraph* lg;
+		Resolver<V>* resolver;
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
 		 */
@@ -291,29 +307,6 @@ namespace ds_lg {
 
 	class LogicNode : public LGNode<lg_v64, LogicNode>{
 	public:
-	/*!
-	* simulation procedure. The current output values is first stored, then new values are calculated.
-	* Any attached observed is activated at this point. An event may propagated if any node output changed its value
-	* @param intermediate intermediate simulation. Hooks are activated
-	* @return true if an event is propagated to the output nodes
-	*/
-	virtual bool propagate(bool intermediate) {
-		if (intermediate){
-			if (hooks.size()!=0){
-				hook();		// handle hooks and calculate new values
-			}else{
-				sim();
-			}
-		} else{
-			sim();		// calculate new values
-		}
-		observe();
-		if (!endpoint){
-			ds_common::int64 result = ~o.x & (o.v ^ bo.v);
-			return  result != 0;
-		}
-		return false;
-	}
 	/*!
 	 * initializes public members. By default the node is not an endpoint.
 	 * @param t node type
@@ -343,16 +336,45 @@ namespace ds_lg {
 		flip();
 		observe();
 	}
+	/*!
+	 * Simulation primitives are created according to the prototype design pattern.
+	 * Derived classes implement this method to replicate the node's structure and behavior
+	 * @return a newly allocated node instance
+	 */
+	virtual LogicNode* clone() const=0;
+	/*!
+	* simulation procedure. The current output values is first stored, then new values are calculated.
+	* Any attached observed is activated at this point. An event may propagated if any node output changed its value
+	* @param intermediate intermediate simulation. Hooks are activated
+	* @return true if an event is propagated to the output nodes
+	*/
+	virtual bool propagate(bool intermediate) {
+		if (intermediate){
+			if (hooks.size()!=0){
+				hook();		// handle hooks and calculate new values
+			}else{
+				sim();
+			}
+		} else{
+			sim();		// calculate new values
+		}
+		observe();
+		if (!endpoint){
+			ds_common::int64 result = ~o.x & (o.v ^ bo.v);
+			return  result != 0;
+		}
+		return false;
+	}
 	protected:
 		lg_v64 bo;						//!< backup node output
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
 		 */
-		void hook_inputs();
+		virtual void hook_inputs();
 		/*!
 		 * processes all hooks at the output ports. Commodity function
 		 */
-		void hook_outputs();
+		virtual void hook_outputs();
 	};
 
 	/*!
@@ -402,6 +424,7 @@ namespace ds_lg {
 			return 0;
 		}
 	};
+
 	/*!
 	 * Simulation primitive for circuit inputs
 	 */
@@ -465,6 +488,7 @@ namespace ds_lg {
 		 */
 		std::size_t get_offset() const {return offset;}
 	};
+
 	/*!
 	 * Simulation primitive for 1-input gates
 	 */
@@ -536,15 +560,6 @@ namespace ds_lg {
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
 		virtual lg_v64** get_input(const std::string& name);
-	private:
-		friend class boost::serialization::access;
-		template<class Archive>
-		void serialize(Archive & ar, const unsigned int version) {
-			ar & boost::serialization::base_object<LogicNode>(*this);
-			ar & a;
-			ar & b;
-			ar & A;
-		}
 	};
 	/*!
 	 * Simulation primitive for 3-input gates
@@ -860,7 +875,7 @@ namespace ds_lg {
 	/*!
 	 * Simulation primitive for generic sequential gates
 	 */
-	class LGState : public LogicNode {
+	class LogicState : public LogicNode {
 	protected:
 		lg_v64 * d;		//!< data input
 		lg_v64 * cd;	//!< clk input
@@ -872,7 +887,8 @@ namespace ds_lg {
 		lg_v64 one;
 		lg_v64 zero;
 	public:
-		LGState(const std::string& t):LogicNode(t), one(-1L,0), zero(0,0){
+
+		LogicState(const std::string& t):LogicNode(t), one(-1L,0), zero(0,0){
 			endpoint = true;
 			rst = &zero;
 			rst_n = &one;
@@ -883,6 +899,11 @@ namespace ds_lg {
 		 * update outputs when clk event is active
 		 */
 		virtual void sim() {
+			o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
+			on = ~o;
+		}
+		virtual void tick(){
+			o = *d;
 			o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
 			on = ~o;
 		}
@@ -899,7 +920,8 @@ namespace ds_lg {
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return
 		 */
-		virtual LogicNode* clone() const { return new LGState(type); }
+		virtual LogicNode* clone() const { return new LogicState(type); }
+		virtual LogicState* clone_register() const { return new LogicState(type); }
 		/*!
 		 * returns an output primitive value, either Q or QN
 		 * @param name output port name
@@ -923,111 +945,47 @@ namespace ds_lg {
 		/*!
 		 * Virtual destructor
 		 */
-		virtual ~LGState(){};
+		virtual ~LogicState(){};
 	};
 
-	typedef std::vector<LogicNode*> lg_node_container;
-	typedef lg_node_container::iterator lg_node_iterator;
-	typedef std::vector<Input*> lg_input_container;
-	typedef std::vector<Output*> lg_output_container;
+	template<class R>
+	class ClockPublisher {
+		std::string clk_name;
+		std::vector<R*> subscribers;
+	public:
+		ClockPublisher(const std::string& name):clk_name(name){}
+		void add_subscriber(R* s){subscribers.push_back(s);}
+		void tick(){
+			for (R* s: subscribers){
+				s->tick();
+			}
+		}
+	};
 
-	/*!
-	 * Main interface for the creation of a leveled graph class. In order to transform a netlist into
-	 * any simulation construct, classes implementing this interface instantiate the necessary simulation objects and
-	 * populate class internals for book-keeping
-	 */
-	class LeveledGraphBuilder{
-	public:
-		/*!
-		 * Sets the parent netlist
-		 * @param netlist parent netlist
-		 */
-		virtual void set_netlist(ds_structural::NetList *netlist)=0;
-		/*!
-		 * Adds an ouput to this simulation construct
-		 * @param out output to include
-		 */
-		virtual void add_output(Output* out)=0;
-		/*!
-		 * Adds an input to this simulation construct
-		 * @param in input to include
-		 */
-		virtual void add_input(Input* in)=0;
-		/*!
-		 * Sets the maximum number of levels
-		 * @param l maximum level
-		 */
-		virtual void set_levels(const int& l)=0;
-		/*!
-		 * Sets up space to hold simulation constructs in the lth level (0<=l<maximum_level)
-		 * @param l level id
-		 */
-		virtual void create_simulation_level(const std::size_t& l)=0;
-		/*!
-		 * Convenience node to iterate over simulation nodes
-		 * @return iterator to the first node element
-		 */
-		virtual lg_node_iterator get_nodes_begin()=0;
-		/*!
-		 * Convenience node to iterate over simulation nodes
-		 * @return iterator to the last node element
-		 */
-		virtual lg_node_iterator get_nodes_end()=0;
-		/*!
-		 * Adds a new node iterator delimiting a simulation level
-		 * @param it iterator
-		 */
-		virtual void push_level_iterator(lg_node_iterator it)=0;
-		/*!
-		 * Searches for the first iterator pointing to a node with the specified depth
-		 * @param level level id (0<=level<maxomum_level)
-		 * @return iterator pointing to the first element of the specified level
-		 */
-		virtual lg_node_iterator get_level_iterator(const std::size_t& level)=0;
-		/*!
-		 * Pushes the width of a level in the leveled graph
-		 * @param width number of nodes in the level
-		 */
-		virtual void push_level_width(const std::size_t& width)=0;
-		/*!
-		 * Gets constant simulation construct for 0
-		 * @return constant 0
-		 */
-		virtual lg_v64* get_constant_0()=0;
-		/*!
-		 * Gets constant simulation construct for 1
-		 * @return constant 1
-		 */
-		virtual lg_v64* get_constant_1()=0;
-		/*!
-		 * Adds a new state node
-		 * @param r new state node to add
-		 */
-		virtual void add_register(LogicNode* r)=0;
-		/*!
-		 * Adds new simulation node
-		 * @param n new node to add
-		 */
-		virtual void add_node(LogicNode* n)=0;
-	};
-	template<class T>
-	class Resolver {
-	public:
-		virtual T* get_node(const std::string& name) const=0;
-		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const=0;
-	};
 	/*!
 	 *
 	 */
-	class LeveledGraph : public LeveledGraphBuilder, public Resolver<LogicNode>{
+	template<class N, class R, class I, class O, class V>
+	class GenericLeveledGraph : public Resolver<N>{
+
+		typedef typename std::vector<N*> lg_node_container;
+		typedef typename lg_node_container::iterator lg_node_iterator;
+		typedef typename std::vector<I*> lg_input_container;
+		typedef typename std::vector<I*>::iterator lg_input_iterator;
+		typedef typename std::vector<O*> lg_output_container;
+		typedef typename std::vector<O*>::iterator lg_output_iterator;
+		typedef typename std::vector<ClockPublisher<R> > lg_clock_container;
+		typedef typename std::vector<R*> lg_register_container;
+
 
 	public:
 
 		lg_input_container inputs;		//!< input ports
 		lg_output_container outputs;	//!< output ports
 		lg_node_container nodes;		//!< all nodes
-		lg_node_container registers;	//!< all sequential elements
-		std::list<ds_faults::SimulationHook<LogicNode>*> hooks;			//!< all active hooks
+		lg_register_container registers;	//!< all sequential elements
+		lg_clock_container clocks;
+		std::list<SimulationHook<N>*> hooks;			//!< all active hooks
 
 		virtual void set_netlist(ds_structural::NetList *netlist) {
 			nl = netlist;
@@ -1055,30 +1013,61 @@ namespace ds_lg {
 		virtual void push_level_width(const std::size_t& width){
 			level_width.push_back(width);
 		}
-		virtual lg_v64* get_constant_0(){
+		virtual V* get_constant_0(){
 			return &constant_0;
 		}
-		virtual lg_v64* get_constant_1(){
+		virtual V* get_constant_1(){
 			return &constant_1;
 		}
-		virtual void add_register(LogicNode* r){
+		virtual void add_register(R* r){
 			registers.push_back(r);
 		}
-		virtual void add_node(LogicNode* n){
+		virtual void add_node(N* n){
 			nodes.push_back(n);
 			registry[n->get_name()] = n;
-			n->set_leveled_graph(this);
+			n->set_resolver(this);
 		}
 		/*!
 		 * verify the internal structure of the graph
 		 * @return true if check is successful
 		 */
-		bool sanity_check();
+		bool sanity_check(){
+			bool c = true;
+			if (nodes.size() <= 0){
+				c = false;
+			}
+			for (N *n: nodes)
+			{
+				if (n->level >= num_levels){
+					c = false;
+					BOOST_LOG_TRIVIAL(error) << "level " << n->level << " > " << num_levels;
+				}
+
+				for (N *o: n->outputs)
+				{
+					if (!o->has_state())
+						if (n->level >= o->level)
+							c = false;
+				}
+			}
+
+			for (int i=0;i<num_levels;i++){
+				unsigned int cnt = 0;
+				std::for_each(nodes.begin(), nodes.end(),
+					[&] (N* n) { if (n->level == i) cnt++;}
+				);
+				if (cnt != level_width[i]){
+					c = false;
+					BOOST_LOG_TRIVIAL(error) << "Inconsistent level (" << i <<") size: "<< cnt << "!=" << level_width[i];
+				}
+			}
+			return c;
+		}
 		/*!
 		 * adds an input port
 		 * @param in input port
 		 */
-		void add_input(Input* in){
+		void add_input(I* in){
 			inputs.push_back(in);
 			registry[in->get_name()] = in;
 		}
@@ -1086,62 +1075,50 @@ namespace ds_lg {
 		 * adds an output port
 		 * @param out output port
 		 */
-		void add_output(Output* out){
+		void add_output(O* out){
 			outputs.push_back(out);
 			registry[out->get_name()] = out;
 		}
 		/*
 		 * various iterators for input and output traversal
 		 */
-		lg_input_container::iterator get_inputs_begin(){return inputs.begin();}
-		lg_input_container::iterator get_inputs_end(){return inputs.end();}
-		lg_output_container::iterator get_outputs_begin(){return outputs.begin();}
-		lg_output_container::iterator get_outputs_end(){return outputs.end();}
-		/*!
-		 * Sets the offset of input and output nodes to read values from and write values to a pattern block during logic simulation
-		 * @param adapter describes port information in the pattern block
-		 */
-		void adapt(const ds_pattern::CombinationalPatternAdapter* adapter);
-		/*!
-		 * simulation command. It performs logic simulation on a 64-bit wide pattern block
-		 * @param pb
-		 */
-		void sim(ds_pattern::SimPatternBlock * pb);
-		/*!
-		 * find a node by name
-		 * @param name name of desired node
-		 * @return pointer to desired node
-		 */
-		virtual LogicNode* get_node(const std::string& name) const{
-			auto it = registry.find(name);
-			if(it!=registry.end())
-				return it->second;
-			return 0;
-		}
-		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const{
-			ds_structural::Gate *g = nl->find_gate(node_name);
-			return g->get_mapping(port_name);
-		}
+		lg_input_iterator get_inputs_begin(){return inputs.begin();}
+		lg_input_iterator get_inputs_end(){return inputs.end();}
+		lg_output_iterator get_outputs_begin(){return outputs.begin();}
+		lg_output_iterator get_outputs_end(){return outputs.end();}
 		/*!
 		 * adds a new hook to be executed during logic simulation
 		 * @param hook
 		 */
-		void add_hook(ds_faults::SimulationHook<LogicNode>* hook);
+		void add_hook(SimulationHook<N>* hook){
+			hooks.push_back(hook);
+			N *node = hook->get_hook_node(this);
+			node->add_hook(hook);
+			push_node(node);
+		}
+
 		/*!
 		 * removes all active hooks
 		 */
-		void clear_hooks();
+		void clear_hooks(){
+			for (auto it=hooks.begin();it!=hooks.end();it++){
+				SimulationHook<N> *hook = *it;
+				N *node = hook->get_hook_node(this);
+				node->remove_hooks();
+			}
+			hooks.clear();
+		}
 
-		void clear_hook(ds_faults::SimulationHook<LogicNode>* hook);
-		/*!
-		 * evaluate nodes in simulation and manage simulation events
-		 */
-		void sim_intermediate();
+		void clear_hook(SimulationHook<N>* hook){
+			hooks.remove(hook);
+			N *node = hook->get_hook_node(this);
+			node->remove_hook(hook);
+		}
 		/*!
 		 * push node into event simulation node list
 		 * @param node node to include
 		 */
-		void push_node(LogicNode *node){
+		void push_node(N *node){
 			simulation[node->level]->push_back(node);
 		}
 		/*!
@@ -1151,19 +1128,118 @@ namespace ds_lg {
 		 * @param n node whose check point is requested
 		 * @return
 		 */
-		LogicNode* get_check_point(LogicNode* n);
+		N* get_check_point(N* n){
+			N *fo = n;
+			if (fo->outputs.size()!=0){
+				while (fo->outputs.size()==1){
+					fo = fo->outputs[0];
+				}
+			}
+			return fo;
+		}
 		/*!
 		 * returns a pointer to the netlist associated with this graph
 		 * @return
 		 */
 		ds_structural::NetList* get_netlist() const {return nl;}
+
+		virtual N* get_node(const std::string& name) const{
+			auto it = registry.find(name);
+			if(it!=registry.end())
+				return it->second;
+			return 0;
+		}
+
+		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const{
+			ds_structural::Gate *g = nl->find_gate(node_name);
+			return g->get_mapping(port_name);
+		}
+
+		template<class IT>
+		void add_publisher(const std::string& name, IT begin, IT end){
+			ClockPublisher<R> p(name);
+			for (IT it=begin; it!=end; it++){
+				R *s = *it;
+				p.add_subscriber(s);
+			}
+			clocks.push_back(p);
+		}
+
 		/*!
-		 *
 		 * @param h hook to propagate
 		 * @return for each pattern / fault,
 		 * returns 1 in position i if the hook can be propagated to its check point in the ith slot
 		 */
-		ds_common::int64 propagate_to_check_point(ds_faults::SimulationHook<LogicNode> *h);
+		ds_common::int64 propagate_to_check_point(SimulationHook<N> *h){
+			N *n = h->get_hook_node(this);
+			n->add_hook(h);
+			N* node = get_check_point(n);
+			V ff = node->get_mark();
+			std::vector<N*> path;
+			path.push_back(n);
+			bool p = n->propagate(true);
+			n->remove_hook(h);
+			if (p)
+				while (n!=node){
+					n = n->outputs[0];
+					path.push_back(n);
+					if (!n->propagate(true))
+						break;
+				}
+			V faulty = n->peek();
+			for (N *p:path){
+				p->rollback();
+			}
+			if (n!=node)
+				return 0;
+
+			ds_common::int64 result = resolve(ff, faulty);
+			return result;
+		}
+
+		virtual void sim(ds_pattern::SimPatternBlock *pb){
+			pattern_block = pb;
+			//propagates events from inputs to outputs
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				N *n = *it;
+				n->propagate(false);
+				n->mark();
+			}
+			//inject hooks
+			for (SimulationHook<N>* h: hooks){
+				N *node = h->get_hook_node(this);
+				push_node(node);
+			}
+			sim_intermediate();
+		}
+
+		virtual void sim_intermediate(){
+			std::set<N*> set;
+			for (int i=0;i<num_levels;i++){
+				lg_node_container* level = simulation[i];
+				iteration++;
+				for (auto it=level->begin();it!=level->end();it++){
+					N *n = *it;
+					if (n->propagate(true)){
+						for (N *o : n->outputs){
+							auto s = set.find(o);
+							if (s==set.end()){
+								push_node(o);
+								set.insert(o);
+							}
+						}
+					}
+				}
+			}
+			for (int i=0;i<num_levels;i++){
+				lg_node_container* level = simulation[i];
+				for (auto it=level->begin();it!=level->end();it++){
+					N *n = *it;
+					n->rollback();
+				}
+				level->clear();
+			}
+		}
 
 	protected:
 		int num_levels;										//!< number of levels in the graph
@@ -1171,12 +1247,611 @@ namespace ds_lg {
 		std::vector<lg_node_iterator> levels;				//!< level iterators. Two iterators define the nodes in a level
 		std::vector<lg_node_container*> simulation;			//!< nodes to evaluate during intermediate simulation
 		std::vector<unsigned int> level_width;				//!< number of nodes per level
-		lg_v64 constant_0 = lg_v64(0L,0L);
-		lg_v64 constant_1 = lg_v64(-1L,0L);
-		lg_v64 constant_X = lg_v64(0L,-1L);
+		V constant_0;
+		V constant_1;
+		V constant_X;
 		ds_structural::NetList *nl;							//!< parent netlist
-		std::map<std::string, LogicNode*> registry;			//!< node map indexed by node instance name
+		std::unordered_map<std::string, N*> registry;			//!< node map indexed by node instance name
 		double iteration;
+		virtual ds_common::int64 resolve(const V& ff, const V& faulty) const = 0;
+	};
+
+	class LeveledGraph : public GenericLeveledGraph<LogicNode,LogicState,Input,Output,lg_v64>{
+		typedef std::vector<LogicNode*> lg_node_container;
+	public:
+
+		LeveledGraph(){
+			constant_0 = lg_v64(0L,0L);
+			constant_1 = lg_v64(-1L,0L);
+			constant_X = lg_v64(0L,-1L);
+		}
+
+		void adapt(const ds_pattern::CombinationalPatternAdapter* adapter);
+
+	//	virtual void sim(ds_pattern::SimPatternBlock *pb);
+
+	protected:
+
+		ds_common::int64 resolve(const lg_v64& ff, const lg_v64& faulty) const {
+			return ~ff.x & ~faulty.x & (ff.v ^ faulty.v);
+		}
+
+	};
+
+	class TNode;
+
+	struct driver_v64 {
+		lg_v64 value;
+		const TNode* driver;
+
+		driver_v64():value(0L,-1L),driver(0){}
+
+		driver_v64(const lg_v64& v):value(v),driver(0){}
+
+		driver_v64(const lg_v64& v, const TNode* node):value(v),driver(node){}
+
+		driver_v64(const ds_common::int64 v, const ds_common::int64 x):value(v,x), driver(0){}
+
+		driver_v64(const ds_common::int64 v, const ds_common::int64 x, const TNode* node):value(v,x), driver(node){}
+
+		driver_v64 operator~() const{
+			lg_v64 o;
+			o.v = ~value.v & ~value.x;
+			o.x = value.x;
+			return o;
+		}
+
+		driver_v64& operator=(const driver_v64 &rhs) {
+			if (this != &rhs) {
+				value.v = rhs.value.v;
+				value.x = rhs.value.x;
+			}
+
+			return *this;
+		}
+
+		driver_v64& operator&=(const driver_v64& rhs){
+			value.v &= rhs.value.v;
+			value.x = (value.x & ~rhs.value.x & ~rhs.value.v) | (rhs.value.x & ~value.v & ~value.x);
+			return *this;
+		}
+		/*!
+		 * unary 'or'
+		 * @param rhs 'or' operand
+		 * @return logic 'or' between this and provided operand
+		 */
+		driver_v64& operator|=(const driver_v64& rhs){
+			value.v |= rhs.value.v;
+			value.x = (value.x & ~rhs.value.x & rhs.value.v) | (rhs.value.x & value.v &value.x);
+			return *this;
+		}
+		/*!
+		 * unary 'xor'
+		 * @param rhs 'xor' operand
+		 * @return logic 'xor' between this and provided operand
+		 */
+		driver_v64& operator^=(const driver_v64& rhs){
+			value.v ^= rhs.value.v;
+			value.x = rhs.value.x | value.x;
+			return *this;
+		}
+		private:
+		friend class boost::serialization::access;
+		template<class Archive>
+		void serialize(Archive & ar, const unsigned int version){
+			ar & value.v;
+			ar & value.x;
+			ar & driver;
+		}
+
+	};
+
+	inline driver_v64 operator&(driver_v64 lhs, const driver_v64& rhs){
+		lhs &= rhs;
+		return lhs;
+	}
+
+	inline driver_v64 operator|(driver_v64 lhs, const driver_v64& rhs){
+		lhs |= rhs;
+		return lhs;
+	}
+
+	inline driver_v64 operator^(driver_v64 lhs, const driver_v64& rhs){
+		lhs ^= rhs;
+		return lhs;
+	}
+
+	class TOutputObserver : public Monitor<driver_v64> {
+	public:
+		std::size_t offset;					//!< output offset in the pattern block
+		ds_pattern::SimPatternBlock** pb;	//!< simulation pattern block
+		std::size_t *voffset;
+		/*!
+		 * initializes public members
+		 * @param output_offset offset
+		 * @param pattern_block target pattern block
+		 */
+		TOutputObserver(std::size_t output_offset, ds_pattern::SimPatternBlock** pattern_block, std::size_t *vector_offset):offset(output_offset), pb(pattern_block), voffset(vector_offset){}
+		/*!
+		 * write the simulation value at the output's offset in the pattern block
+		 * @param v simulation value
+		 */
+		virtual void observe(const driver_v64& v) {
+			(*pb)->values[offset].v = v.value.v;
+			(*pb)->values[offset].x = v.value.x;
+		}
+	};
+	class TNode : public LGNode<driver_v64, TNode>{
+	public:
+	/*!
+	 * initializes public members. By default the node is not an endpoint.
+	 * @param t node type
+	 */
+	TNode(const std::string &t):LGNode<driver_v64,TNode>(t){
+		o.value = lg_v64(0L,-1L);
+		o.driver = this;
+	}
+	/*!
+	 * revert output to previous value
+	 */
+	virtual void rollback(){o.value = bo;}
+	/*!
+	 * save the output value of the base simulation
+	 */
+	void mark() {bo = o.value;}
+	/*!
+	 * queries the output value of the base simulation
+	 * @return
+	 */
+	lg_v64 get_mark() const {return bo;}
+	/*!
+	 * set output value to the complement of the simulation value
+	 */
+	virtual void flip(){o.value = ~bo;};
+	/*!
+	 * set output value to the complement of the simulation value and apply any attached observer
+	 */
+	void flip_and_observe(){
+		flip();
+		observe();
+	}
+	/*!
+	 * Simulation primitives are created according to the prototype design pattern.
+	 * Derived classes implement this method to replicate the node's structure and behavior
+	 * @return a newly allocated node instance
+	 */
+	virtual TNode* clone() const=0;
+	/*!
+	* simulation procedure. The current output values is first stored, then new values are calculated.
+	* Any attached observed is activated at this point. An event may propagated if any node output changed its value
+	* @param intermediate intermediate simulation. Hooks are activated
+	* @return true if an event is propagated to the output nodes
+	*/
+	virtual bool propagate(bool intermediate) {
+		if (intermediate){
+			if (hooks.size()!=0){
+				hook();		// handle hooks and calculate new values
+			}else{
+				sim();
+			}
+		} else{
+			sim();		// calculate new values
+		}
+		observe();
+		if (!endpoint){
+			ds_common::int64 result = ~o.value.x & (o.value.v ^ bo.v);
+			return  result != 0;
+		}
+		return false;
+	}
+
+	virtual const lg_v64* get_previous_value(const driver_v64 *p) const {
+		if (p == &o)
+			return &previous;
+		return 0;
+	}
+
+	protected:
+		lg_v64 bo;						//!< backup node output
+		lg_v64 previous;
+		/*!
+		 * Processes all hooks at the input ports. Commodity function
+		 */
+		virtual void hook_inputs();
+		/*!
+		 * processes all hooks at the output ports. Commodity function
+		 */
+		virtual void hook_outputs();
+	};
+
+	/*!
+	 * Simulation primitive for circuit outputs
+	 */
+	class TOutput : public TNode {
+	protected:
+		driver_v64 *a;				//!< single input
+		std::string name;		//!< output name
+	public:
+		/*!
+		 * sets the name of this output node, which is usually the port name in the netlist
+		 * @param n output name
+		 */
+		void set_name(const std::string& n){name = n;}
+		/*!
+		 * returns the given output name
+		 * @return
+		 */
+		virtual std::string get_name() const {return name;}
+		/*!
+		 * simulation value is forwarded form input to output
+		 */
+		virtual void sim() {
+			previous = o.value;
+			o.value = a->value;
+		}
+		/*!
+		 * simulation value is forwarded form input to output. Faults are injected
+		 */
+		virtual void hook();
+		/*!
+		 * default values: this node is an endpoint and its type is initialized to "output"
+		 */
+		TOutput():TNode("output"){ endpoint = true;};
+		/*!
+		 * allocate new Output instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TOutput* clone() const { return new TOutput();}
+		/*!
+		 * only one input port available
+		 * @param name output port name
+		 * @return pointer to this node's input primitive value
+		 */
+		virtual driver_v64** get_input(const std::string& name){
+			if (name == "a") return &a;
+			return 0;
+		}
+	};
+
+	/*!
+	 * Simulation primitive for circuit inputs
+	 */
+	class TInput : public TNode {
+	protected:
+		std::string name;					//!< input name
+		std::size_t offset;					//!< offset position of this node in the pattern block
+		std::size_t *vector_offset;
+		ds_pattern::SimPatternBlock** pb;	//!< points current simulation pattern block
+	public:
+		/*!
+		 * sets the name of this output node, which is usually the port name in the netlist
+		 * @param n output name
+		 */
+		void set_name(const std::string& n){name = n;}
+		/*!
+		 * returns the given output name
+		 * @return
+		 */
+		virtual std::string get_name() const {return name;}
+		/*!
+		 * copies the simulation values from the pattern block to this input
+		 */
+		virtual void sim() {
+			previous = o.value;
+			o.value.v = (*pb)->values[offset + *vector_offset].v;
+			o.value.x = (*pb)->values[offset + *vector_offset].x;
+		}
+		/*!
+		 * simulation value is forwarded form input to output. Faults are injected
+		 */
+		virtual void hook();
+		/*!
+		 * default values: this node is an endpoint and its type is initialized to "input"
+		 */
+		TInput():TNode("input"),vector_offset(0){};
+		/*!
+		 * allocate new Input instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TInput* clone() const { return new TInput();}
+		/*!
+		 * no inputs in this node
+		 * @param name
+		 * @return null
+		 */
+		virtual driver_v64** get_input(const std::string& name){
+			return 0;
+		}
+		/*!
+		 * sets the address of a pattern block out of which this input is evaluated
+		 * @param pattern_block address of current pattern block to simulate
+		 */
+		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){pb = pattern_block;}
+		/*!
+		 * sets the offset in the current pattern block corresponding to this input
+		 * @param input_offset offset in pattern block
+		 */
+		void set_offset(const std::size_t input_offset){offset = input_offset;}
+		/*!
+		 * return the offset in the current pattern block corresponding to thie input
+		 * @return
+		 */
+		std::size_t get_offset() const {return offset;}
+
+		void set_vector_offset(std::size_t* vo){
+			vector_offset = vo;
+		}
+	};
+
+	/*!
+	 * Simulation primitive for 1-input gates
+	 */
+	class TNode1I : public TNode {
+	protected:
+		driver_v64 *a;					//!< single input
+		lg_v64 (*A)(val64_cpc a);	//!< pointer to a function expecting 1 simulation value and returning 1 simulation value
+	public:
+		/*!
+		 * Simulation primitive for single-input gates
+		 */
+		virtual void sim() {
+			previous = o.value;
+			o.value = (*A)(&a->value);
+		}
+		/*!
+		 * calculate output value by evaluating simulation function with 1 input. Faults are injected
+		 */
+		virtual void hook();
+		/*!
+		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
+		 * @param t gate type
+		 * @param AA simulation function
+		 */
+		TNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):TNode(t), A(AA){};
+		/*!
+		 * allocate new LGNode1I instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TNode* clone() const { return new TNode1I(type, A);}
+		/*!
+		 * only one input port available
+		 * @param name port name
+		 * @return pointer to this node's input value. Null is name does not match.
+		 */
+		virtual driver_v64** get_input(const std::string& name);
+	};
+	/*!
+	 * Simulation primitive for 2-input gates
+	 */
+	class TNode2I : public TNode {
+	protected:
+		driver_v64 * a;								// two input nodes
+		driver_v64 * b;								//
+		lg_v64 (*A)(val64_cpc a, val64_cpc b);	//!< pointer to a function expecting 2 simulation value and returning 1 simulation value
+	public:
+		/*!
+		 * calculate output value by evaluating simulation function with 2 inputs
+		 */
+		virtual void sim() {
+			previous = o.value;
+			o.value = (*A)(&a->value,&b->value);
+			return;
+		}
+		/*!
+		 * calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
+		 */
+		virtual void hook();
+		/*!
+		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
+		 * @param t gate type
+		 * @param AA simulation function
+		 */
+		TNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):TNode(t), A(AA){};
+		/*!
+		 * allocate new LGNode2I instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TNode* clone() const { return new TNode2I(type, A); }
+		/*!
+		 * two input ports available
+		 * @param name port name
+		 * @return pointer to one of this node's input values. Null is name is unknown.
+		 */
+		virtual driver_v64** get_input(const std::string& name);
+	};
+	/*!
+	 * Simulation primitive for 3-input gates
+	 */
+	class TNode3I : public TNode {
+	protected:
+		driver_v64 * a;
+		driver_v64 * b;
+		driver_v64 * c;
+		// pointer to a function expecting 3 simulation value and returning 1 simulation value
+		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c);
+	public:
+		/*!
+		 * calculate output value by evaluating simulation function with 3 inputs
+		 */
+		virtual void sim() {
+			previous = o.value;
+			o.value = (*A)(&a->value,&b->value,&c->value);
+		}
+		/*!
+		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
+		 */
+		virtual void hook();
+		/*!
+		 * By default this node is not an endpoint. The constructor initializes the node type and the function to execute during simulation
+		 * @param t gate type
+		 * @param AA simulation function
+		 */
+		TNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):TNode(t), A(AA){};
+		/*!
+		 * allocate new LGNode3I instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TNode* clone() const { return new TNode3I(type, A); }
+		/*!
+		 * three input ports available
+		 * @param name port name
+		 * @return pointer to one of this node's input values. Null is name is unknown.
+		 */
+		virtual driver_v64** get_input(const std::string& name);
+	};
+	class TState : public TNode {
+	protected:
+		driver_v64 * d;		//!< data input
+		driver_v64 * cd;	//!< clk input
+		driver_v64 o_n;		//!< not Q output
+		lg_v64 previous_n;
+		driver_v64 * rst;
+		driver_v64 * rst_n;
+		driver_v64 * load;
+		driver_v64 * load_n;
+		driver_v64 * si;
+		driver_v64 * se;
+		driver_v64 one;
+		driver_v64 zero;
+		ds_pattern::SimPatternBlock** pb;
+		std::size_t offset;
+
+
+	public:
+		TState(const std::string& t):TNode(t), o_n(0,-1L,this), one(-1L,0,this), zero(0,0,this){
+			rst = &zero;
+			rst_n = &one;
+			load = &zero;
+			load_n = &one;
+		}
+		/*!
+		 * update outputs when clk event is active
+		 */
+		virtual void sim() {
+			previous = o.value;
+			previous_n = o_n.value;
+			o.value = (o.value & ~rst->value & rst_n->value) | (load->value | ~load_n->value);
+			o_n.value = ~o.value;
+		}
+		virtual void tick(){
+			o.value = d->value;
+			o.value = (o.value & ~rst->value & rst_n->value) | (load->value | ~load_n->value);
+			o_n.value = ~o.value;
+		}
+		/*!
+		 * Simulation primitive state gates. Faults are injected
+		 */
+		virtual void hook();
+		/*!
+		 * revert output to previous value
+		 */
+		virtual void rollback(){o = bo; o_n = ~bo;}
+		virtual void flip(){o.value = ~o.value; o_n.value = o.value;};
+		/*!
+		 * allocate new LGState instance according to the prototype pattern
+		 * @return
+		 */
+		virtual TNode* clone() const { return new TState(type); }
+		virtual TState* clone_register() const { return new TState(type); }
+		/*!
+		 * returns an output primitive value, either Q or QN
+		 * @param name output port name
+		 * @return pointer to the node's requested output primitive value
+		 */
+		virtual driver_v64* get_output(const std::string& name) {
+			if (name=="q")return &o;
+			if (name=="qn")return &o_n;
+			return 0;}
+		/*!
+		 * two input ports available
+		 * @param name port name
+		 * @return pointer to one of this node's input values (D or CD). Null is name is unknown.
+		 */
+		virtual driver_v64** get_input(const std::string& name);
+		/*!
+		 * by definition this node has state
+		 * @return
+		 */
+		virtual bool has_state() {return true;}
+		void scan(){
+			o.value = (*pb)->values[offset];
+		}
+		void set_offset(const std::size_t reg_offset){
+			offset = reg_offset;
+		}
+		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){
+			pb = pattern_block;
+		}
+		virtual const lg_v64* get_previous_value(const driver_v64 *p) const {
+			if (p == &o)
+				return &previous;
+			if (p == &o_n)
+				return &previous_n;
+			return 0;
+		}
+		/*!
+		 * Virtual destructor
+		 */
+		virtual ~TState(){};
+	};
+
+	class TLeveledGraph : public GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>{
+		typedef std::vector<TNode*> lg_node_container;
+	public:
+
+		TLeveledGraph():vector_offset(0){
+			constant_0 = lg_v64(0L,0L);
+			constant_1 = lg_v64(-1L,0L);
+			constant_X = lg_v64(0L,-1L);
+		}
+	protected:
+
+
+		std::size_t vector_offset;
+		ds_common::int64 resolve(const driver_v64& ff, const driver_v64& faulty) const {
+			return ~ff.value.x & ~faulty.value.x & (ff.value.v ^ faulty.value.v);
+		}
+
+	public:
+
+		void adapt(const ds_pattern::SequentialPatternAdapter* adapter);
+
+		void reset_offset(){
+			vector_offset = 0;
+		}
+		void next_vector(){
+			vector_offset += inputs.size() + outputs.size();
+		}
+		void scan(){
+			for (auto it=registers.begin();it!=registers.end();it++){
+				TState *n = *it;
+				n->scan();
+			}
+		}
+
+		virtual void sim(ds_pattern::SimPatternBlock *pb){
+			pattern_block = pb;
+			reset_offset();
+			scan();
+			//propagates events from inputs to outputs --> LAUNCH
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				TNode *n = *it;
+				n->propagate(false);
+			}
+			clocks[0].tick();
+			//propagates events from inputs to outputs --> CAPTURE
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				TNode *n = *it;
+				n->propagate(false);
+				n->mark();
+			}
+			//inject hooks
+			for (SimulationHook<TNode>* h: hooks){
+				TNode *node = h->get_hook_node(this);
+				push_node(node);
+			}
+			sim_intermediate();
+		}
 	};
 }
 

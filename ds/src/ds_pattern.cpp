@@ -66,10 +66,21 @@ ds_pattern::CombinationalPatternList* ds_pattern::parse_combinational_wgl(const 
 	return pl;
 }
 
-ds_pattern::CombinationalPatternProvider* ds_pattern::load_pattern_blocks(const std::string& file, bool compact){
+ds_pattern::CombinationalPatternProvider* ds_pattern::load_combinational_blocks(const std::string& file, bool compact){
 	ds_pattern::CombinationalPatternList* pl = ds_pattern::parse_combinational_wgl(file, compact);
 	ds_pattern::CombinationalPatternProvider* pattern_blocks = new ds_pattern::CombinationalPatternProvider(*pl);
 	delete pl;
+	return pattern_blocks;
+}
+
+ds_pattern::SequentialPatternProvider* ds_pattern::load_loc_blocks(const std::string& file){
+	ds_pattern::scan_data data;
+	ds_pattern::parse_transition_wgl(file, data);
+	BOOST_LOG_TRIVIAL(info) << "wgl parsed";
+	ds_pattern::SequentialPatternList pl(data);
+	BOOST_LOG_TRIVIAL(info) << "pattern list generated";
+	ds_pattern::SequentialPatternProvider* pattern_blocks = new ds_pattern::SequentialPatternProvider(pl);
+	BOOST_LOG_TRIVIAL(info) << "provider";
 	return pattern_blocks;
 }
 
@@ -233,7 +244,6 @@ ds_pattern::SequentialPatternList::SequentialPatternList(const scan_data& sd):nu
 	for ( ds_pattern::tester_cycle c: sd.cycles ){
 		boost::apply_visitor(extractor, c);
 	}
-
 }
 
 void ds_pattern::sequential_extractor::operator()(const ds_pattern::scan& v) {
@@ -297,20 +307,26 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 	num_inputs = pl.get_num_inputs();
 	num_outputs = pl.get_num_outputs();
 
+	ports.insert(ports.begin(), pl.begin_port_order(), pl.end_port_order());
+	for (std::size_t i=0;i<pl.get_num_scan_cells();i++){
+		cells.push_back(pl.get_cell_name(i));
+	}
+
+
 	std::size_t num_scan = 0;
 	for (std::size_t i=0;i<pl.get_vector_count();i++){
 		ds_pattern::PatternValue v = pl.get_scan_values(i);
 		if (v.get_size() > 0)
 			num_scan++;
 	}
-	std::size_t cell_offset = (pl.get_num_inputs() + pl.get_num_outputs()) * VECTOR_NUMBER;
+	std::size_t cell_offset = (pl.get_num_inputs() + pl.get_num_outputs()) * 2;
 
 	std::size_t scan_cycles = 0;
 	std::size_t idx = 0;
+
 	while(scan_cycles < num_scan){
 
 		ds_pattern::PatternValue pv = pl.get_scan_values(idx++);
-
 		if (pv.get_size() > 0){
 
 			scan_cycles++;
@@ -318,37 +334,70 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 			std::size_t last = ds_common::WIDTH;
 
 			if ((scan_cycles / ds_common::WIDTH) * ds_common::WIDTH + last > num_scan)
-				last =  pl.get_vector_count() % ds_common::WIDTH;
+				last =  num_scan % ds_common::WIDTH;
 
 			SimPatternBlock b(last);
-			std::size_t total_values = cell_offset + pl.get_num_scan_cells();
-
+			std::size_t total_values = cell_offset + pl.get_num_scan_cells() * 2;
 			for (std::size_t j=0;j<total_values;j++){
 				b.values.push_back(ds_lg::lg_v64(0x0L,-1L));
 			}
-
 			set_values(0, cell_offset, pv, b);
 			ds_pattern::PatternValue launch = pl.get_scan_values(idx++);
 			ds_pattern::PatternValue capture = pl.get_scan_values(idx++);
 			set_values(0, 0, launch, b);
-			set_values(0, cell_offset / 2, launch, b);
+			set_values(0, cell_offset / 2, capture, b);
 
-			std::size_t block_start = ++scan_cycles;
+			std::size_t block_start = scan_cycles;
+			std::size_t curr = scan_cycles + 1;
 
-			while(scan_cycles - block_start < last){
+			while(curr - block_start < last ){
 
 				ds_pattern::PatternValue v = pl.get_scan_values(idx++);
 
 				if (v.get_size() > 0){
-					set_values(scan_cycles - block_start, cell_offset, pv, b);
-					ds_pattern::PatternValue launch = pl.get_scan_values(idx++);
-					ds_pattern::PatternValue capture = pl.get_scan_values(idx++);
-					set_values(scan_cycles - block_start, 0, launch, b);
-					set_values(scan_cycles - block_start, cell_offset / 2, launch, b);
+
 					scan_cycles++;
+
+					set_values(curr - block_start, cell_offset, pv, b);
+					if ((last != ds_common::WIDTH) && ((scan_cycles - block_start)==last-1))
+						break;
+					BOOST_LOG_TRIVIAL(trace) << " 15 " << "last:" << last << " " << (scan_cycles - block_start);
+					ds_pattern::PatternValue launch = pl.get_scan_values(idx++);
+					BOOST_LOG_TRIVIAL(trace) << "16";
+					ds_pattern::PatternValue capture = pl.get_scan_values(idx++);
+					BOOST_LOG_TRIVIAL(trace) << "17";
+					set_values(curr - block_start, 0, launch, b);
+					BOOST_LOG_TRIVIAL(trace) << "18";
+					set_values(curr - block_start, cell_offset / 2, capture, b);
+					BOOST_LOG_TRIVIAL(trace) << "19 " << idx << " " << pl.get_vector_count() << " all " << num_scan << " sc " <<scan_cycles;
+					curr++;
 				}
 			}
+			values.push_back(b);
 		}
+	}
+
+	BOOST_LOG_TRIVIAL(trace) << "A";
+
+	std::size_t num_blocks = values.size();
+	int output_offset = cell_offset + pl.get_num_scan_cells();
+	for (std::size_t i=0;i<num_blocks-1;i++){
+		for (std::size_t j=0;j<pl.get_num_scan_cells();j++){
+			long av = values[i+1].values[output_offset+j].v & 0x1L;
+			long ax = values[i+1].values[output_offset+j].x & 0x1L;
+
+			long vfixed = (values[i].values[output_offset+j].v << 1) | av;
+			long xfixed = (values[i].values[output_offset+j].x << 1) | ax;
+
+			values[i].values[output_offset+j].v = vfixed;
+			values[i].values[output_offset+j].x = xfixed;
+		}
+	}
+	if (values[num_blocks-1].num_patterns == 1){
+		values.erase(--values.end());
+	} else {
+		values[num_blocks-1].num_patterns--;
+		values[num_blocks-1].mask <<= 1;
 	}
 }
 
@@ -380,9 +429,25 @@ int ds_pattern::SequentialPatternProvider::get_port_offset(const std::size_t& ve
 			break;
 		}
 	}
-	if (offset == -1)
+	if (offset == -1){
+		BOOST_LOG_TRIVIAL(error) << "Port: " << name << " not found in vector" << vector;
 		return offset;
+	}
 	offset += vector_offset;
+	return offset;
+}
+
+int ds_pattern::SequentialPatternProvider::get_port_offset(const std::string& name) const{
+	int offset = -1;
+	for (std::size_t i=0;i<ports.size();i++){
+		if (ports[i]==name){
+			offset = i;
+			break;
+		}
+	}
+	if (offset==-1){
+		BOOST_LOG_TRIVIAL(error) << "Port not found: " << name;
+	}
 	return offset;
 }
 
@@ -394,14 +459,16 @@ int ds_pattern::SequentialPatternProvider::get_scan_offset(const std::string& na
 			break;
 		}
 	}
-	if (offset == -1)
+	if (offset == -1){
+		BOOST_LOG_TRIVIAL(error) << "Scan cell not found: " << name;
 		return offset;
+	}
 	offset += num_inputs + num_outputs;
 	return offset;
 }
 
 std::string ds_pattern::SequentialPatternProvider::get_name(const int& idx) const{
-	int scan_offset = (num_inputs + num_outputs) * VECTOR_NUMBER;
+	int scan_offset = (num_inputs + num_outputs) * 2;
 	if (idx < scan_offset){
 		return ports[idx % (num_inputs + num_outputs)];
 	}

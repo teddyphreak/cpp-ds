@@ -190,34 +190,33 @@ void ds_trans::insert_top_level_scan(std::string top_level, std::string scan_por
 }
 
 void ds_trans::write_test_procedures(const std::string& dofile_name, const std::string& tp_name, const std::string& sg_name,
-		const ds_structural::CombinationalScanMap *map,
-		const ds_trans::TimeplateDesc& tp_slow,
-		const ds_trans::TimeplateDesc& tp_fast,
-		const ds_trans::ScanProperties& properties,
-		const std::string& pattern_file,
-		const std::string& fault_file){
+	const ds_structural::CombinationalScanMap *map,
+	const ds_trans::TimeplateDesc& tp_slow,
+	const ds_trans::TimeplateDesc& tp_fast,
+	const ds_trans::ScanProperties& properties,
+	const std::string& pattern_file,
+	const std::string& fault_file){
 
-		if (map->get_input_chains() != map->get_output_chains()){
-			BOOST_LOG_TRIVIAL(error) << "Number of input and output scan chains does not match";
-			return;
-		}
+	if (map->get_input_chains() != map->get_output_chains()){
+		BOOST_LOG_TRIVIAL(error) << "Number of input and output scan chains does not match";
+		return;
+	}
 
-		std::string clk_name = properties.clk_name;
-		std::string se_name = properties.se_name;
-		std::string si_name = properties.si_name;
-		std::string so_name = properties.so_name;
-		std::string rst_name = properties.reset_name;
+	std::string clk_name = properties.clk_name;
+	std::string se_name = properties.se_name;
+	std::string si_name = properties.si_name;
+	std::string so_name = properties.so_name;
+	std::string rst_name = properties.reset_name;
 
+	std::ofstream dofile(dofile_name);
+	dofile << "add clocks 0 " << clk_name << std::endl;
 
-		std::ofstream dofile(dofile_name);
-		dofile << "add clocks 0 " << clk_name << std::endl;
+	unsigned int num_chains = map->get_input_chains();
+	unsigned int max_length = map->get_output_chain_length(0);
+	for (std::size_t i=1;i<num_chains;i++){
 
-		unsigned int num_chains = map->get_input_chains();
-		unsigned int max_length = map->get_output_chain_length(0);
-		for (std::size_t i=1;i<num_chains;i++){
-			if (map->get_output_chain_length(i) > max_length){
-				max_length = map->get_output_chain_length(i);
-			}
+		if (map->get_output_chain_length(i) > max_length){
+			max_length = map->get_output_chain_length(i);
 		}
 
 		std::ofstream file(tp_name);
@@ -247,7 +246,22 @@ void ds_trans::write_test_procedures(const std::string& dofile_name, const std::
 		dofile << "save patterns " << pattern_file << " -procfile -wgl -replace -parallel -begin 0 -scan_test -mode_internal" << std::endl;
 		dofile << "exit" << std::endl;
 		dofile.close();
-
-
+	}
 }
 
+void ds_trans::fix_nxp(ds_structural::NetList *nl){
+	std::vector<ds_structural::Gate*> gates;
+	nl->get_gates(gates);
+	for (ds_structural::Gate *g:gates){
+		if (g->get_type()=="bufif1"){
+			ds_structural::PortBit *output = g->find_port_by_name("o1");
+			ds_structural::Signal *s = output->get_signal();
+			if (s->count_output_ports() == 1){
+				BOOST_LOG_TRIVIAL(trace) << "Replacing tristate buffer: " << g->get_instance_name();
+				g->set_type("and");
+			} else {
+				BOOST_LOG_TRIVIAL(trace) << "Tristate buffer cannot be replaced: " << g->get_instance_name();
+			}
+		}
+	}
+}

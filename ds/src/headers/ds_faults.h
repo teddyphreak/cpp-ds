@@ -10,6 +10,8 @@
 
 #include "ds_lg.h"
 #include <boost/log/trivial.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
 
 namespace ds_faults {
 
@@ -54,20 +56,20 @@ public:
  * @return
  */
 
-template<class T>
-ds_lg::lg_v64* resolve(const PinReference *pr, ds_lg::Resolver<T> *res){
+template<class T, class V>
+V* resolve(const PinReference *pr, ds_lg::Resolver<T> *res){
 	std::string name = pr->get_gate_name();
 	std::string port = pr->get_port_name();
-	ds_lg::LogicNode *n = res->get_node(name);
+	T *n = res->get_node(name);
 	// try a gate first
 	if (n!=0){
 		std::string hook_port = res->get_port_name(name, port);
 		if (pr->is_input()){
-			ds_lg::lg_v64 *p = *n->get_input(hook_port);
+			V *p = *n->get_input(hook_port);
 			return p;
 		}
 		if (pr->is_output()){
-			ds_lg::lg_v64 *p = n->get_output(hook_port);
+			V *p = n->get_output(hook_port);
 			return p;
 		}
 	} else {
@@ -83,32 +85,12 @@ ds_lg::lg_v64* resolve(const PinReference *pr, ds_lg::Resolver<T> *res){
 	return 0;
 }
 
-template<class T>
-class SimulationHook{
-public:
-	/*!
-	 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
-	 * @return 1 in bit position i if fault is active in slot i
-	 */
-	virtual ds_lg::int64 hook(ds_lg::Resolver<T> *res) const=0;
-	/*!
-	 * returns the port name in the leveled graph node where the fault is inserted
-	 * @return
-	 */
-	virtual std::string get_hook_port() const=0;
-	/*!
-	 * returns the graph node that owns this hook. This is the node whose behavior is affected by this hook
-	 * @return
-	 */
-	virtual T* get_hook_node(ds_lg::Resolver<T> *res) const=0;
-
-};
-
 /*!
  * Static faults depend only the the current logic state of the circuit. They are well-suited for combinational simulation.
  * Static faults are active if the specified nodes in the leveled graph have certain logic values
  */
-class StaticFault : public SimulationHook<ds_lg::LogicNode>, public PinReference {
+template<class N, class T>
+class StaticFault : public ds_lg::SimulationHook<N>, public PinReference {
 protected:
 
 	std::string node_name;							//!< node name
@@ -116,11 +98,14 @@ protected:
 	bool isInput;									//!< true if input port
 	bool isOutput;									//!< true if output port
 	std::vector<const PinReference*> aggressors;	//!< list of simulation primitives to observe
-	std::vector<ds_lg::lg_v64> polarity;			//!< conditions for the simulation primitives
+	std::vector<T> polarity;						//!< conditions for the simulation primitives
 	ds_lg::int64 mask;								//!< fault is only is mask bit position is true
 	std::string gate_name;
 	std::string gate_port_name;
 public:
+
+	virtual ds_lg::int64 compare(const T* a, const T& b) const = 0;
+	virtual T convert(const ds_common::Value& v) const = 0;
 
 	/*!
 	 * constructs a static fault for simulation. This intermediate fault representation can be injected into any
@@ -180,8 +165,8 @@ public:
 	 * @param lg leveled graph where the fault is injected
 	 * @return
 	 */
-	virtual ds_lg::LogicNode* get_hook_node(ds_lg::Resolver<ds_lg::LogicNode> *res) const {
-		ds_lg::LogicNode *n = res->get_node(node_name);
+	virtual N* get_hook_node(ds_lg::Resolver<N> *res) const {
+		N *n = res->get_node(node_name);
 		return n;
 	}
 	/*!
@@ -190,13 +175,11 @@ public:
 	 * Otherwise, it is checked if the logical value in the simulation primitive matches that specified in the condition
 	 * @return true if static fault is active
 	 */
-	virtual ds_lg::int64 hook(ds_lg::Resolver<ds_lg::LogicNode>* res) const{
+	virtual ds_lg::int64 hook(ds_lg::Resolver<N>* res) const{
 		ds_lg::int64 active = -1L;
 		for(std::size_t i=0;i<aggressors.size();i++){
-			ds_lg::lg_v64 *agg_value = ds_faults::resolve(aggressors[i], res);
-			ds_common::int64 v = agg_value->v;
-			ds_common::int64 p = polarity[i].v;
-			active &= ~(v ^ p) ;
+			T *agg_value = ds_faults::resolve<N, T>(aggressors[i], res);
+			active &= compare(agg_value, polarity[i]);
 		}
 		return active;
 	}
@@ -206,16 +189,10 @@ public:
 	 * @param v required simulation value
 	 */
 	void add_condition(const PinReference* pin, const ds_common::Value& v){
-		if (v==ds_common::BIT_X){
-			aggressors.push_back(pin);
-			polarity.push_back(ds_lg::lg_v64(0L,-1L));
-		} else if (v==ds_common::BIT_0){
-			aggressors.push_back(pin);
-			polarity.push_back(ds_lg::lg_v64(0L,0L));
-		} else if (v==ds_common::BIT_1){
-			aggressors.push_back(pin);
-			polarity.push_back(ds_lg::lg_v64(-1L,0L));
-		}
+
+		T val = convert(v);
+		aggressors.push_back(pin);
+		polarity.push_back(val);
 	}
 	/*!
 	 * queries the name of the equivalent gate in the netlist
@@ -248,7 +225,7 @@ public:
 /*!
  * realizes a stuck-at fault for simulation. The name, port and value of the fault are stored internally.
  */
-class StuckAt : public StaticFault {
+class StuckAt : public StaticFault<ds_lg::LogicNode, ds_lg::lg_v64> {
 	ds_common::Value value;		//!< stuck-at value
 public:
 	/*!
@@ -258,7 +235,8 @@ public:
 	 * @param p port name
 	 * @param v stuck-at value. Behavior is undefined if 'X' is provided
 	 */
-	StuckAt(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):StaticFault(nl,g,p),value(ds_common::BIT_X){
+	StuckAt(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):
+		StaticFault<ds_lg::LogicNode, ds_lg::lg_v64>(nl, g, p), value(ds_common::BIT_X){
 		if (v == ds_common::BIT_0){
 			value = ds_common::BIT_1;
 		} else if (v == ds_common::BIT_1)
@@ -266,7 +244,59 @@ public:
 		add_condition(this,value);
 	}
 
+	virtual ds_lg::int64 compare(const ds_lg::lg_v64* a, const ds_lg::lg_v64& b) const{
+		ds_common::int64 v = a->v;
+		ds_common::int64 p = b.v;
+		return ~(v ^ p) ;
+	}
+
+	virtual ds_lg::lg_v64 convert(const ds_common::Value& v) const {
+		if (v==ds_common::BIT_0){
+			return ds_lg::lg_v64(0L,0L);
+		} else if (v==ds_common::BIT_1){
+			return ds_lg::lg_v64(-1L,0L);
+		}
+		return ds_lg::lg_v64(0L,-1L);
+	}
+
 	virtual ~StuckAt(){}
+};
+
+class TransitionFault: public StaticFault<ds_lg::TNode, ds_lg::driver_v64>{
+	ds_common::Value value;		//!< transition value
+public:
+	/*!
+	 * Constructs a new transition delay fault for simulation. It adds a single observed node (also the victim node)
+	 * @param nl netlist where this fault is injected
+	 * @param g gate name
+	 * @param p port name
+	 * @param v transition value. Behavior is undefined if 'X' is provided
+	 */
+	TransitionFault(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):
+		StaticFault<ds_lg::TNode, ds_lg::driver_v64>(nl,g,p), value(ds_common::BIT_X){
+		if (v == ds_common::BIT_0){
+			value = ds_common::BIT_1;
+		} else if (v == ds_common::BIT_1)
+			value = ds_common::BIT_0;
+		add_condition(this,value);
+	}
+
+	virtual ds_lg::int64 compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const{
+		ds_lg::lg_v64 v = a->value;
+		ds_lg::lg_v64 t = b.value;
+		const ds_lg::TNode *driver = a->driver;
+		const ds_lg::lg_v64 *p = driver->get_previous_value(a);
+		return ~(v.v ^ t.v) & (p->v ^ v.v) & ~v.x & ~t.x & ~p->x  ;
+	}
+
+	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
+		if (v==ds_common::BIT_0){
+			return ds_lg::driver_v64(0L,0L);
+		} else if (v==ds_common::BIT_1){
+			return ds_lg::driver_v64(-1L,0L);
+		}
+		return ds_lg::driver_v64(0L,-1L);
+	}
 };
 
 /*!
@@ -371,6 +401,12 @@ enum FaultCategory {
 	DT		//!< detected
 };
 
+struct fastscan_descriptor{
+	char type;
+	std::string code;
+	std::string path_name;
+};
+
 class FaultList {
 
 	/// probability of detecting a fault when the simulation value is X and the expected value is [0|1]
@@ -392,6 +428,26 @@ public:
 	 * @param nl netlist for which fault descriptors are generated
 	 */
 	FaultList(ds_structural::NetList* nl);
+
+	template<typename I>
+	FaultList(I begin, I end){
+		for (I it=begin;it!=end;it++){
+			fastscan_descriptor d = *it;
+			ds_common::Value v = ds_common::BIT_X;
+			if (d.type == '1'){
+				v = ds_common::BIT_1;
+			} else if (d.type == '0'){
+				v = ds_common::BIT_0;
+			}
+			std::size_t marker = d.path_name.find_last_of('/');
+			std::string gate_name = d.path_name.substr(0, marker);
+			std::string port_name = d.path_name.substr(marker+1, std::string::npos);
+			SAFaultDescriptor* f = new SAFaultDescriptor(gate_name, port_name, v);
+			uk.insert(f);
+			fault_map[f] = UK;
+		}
+	}
+
 	/*!
 	 * deletes all generated fault descriptors
 	 */
@@ -472,6 +528,57 @@ private:
 	std::set<SAFaultDescriptor*>* find_container(const FaultCategory& category);
 
 };
+}
+
+BOOST_FUSION_ADAPT_STRUCT(
+    ds_faults::fastscan_descriptor,
+    (char, type)
+    (std::string, code)
+    (std::string, path_name)
+)
+
+namespace ds_faults{
+
+namespace qi = boost::spirit::qi;
+template <typename Iterator>
+struct fastscan_fault_parser : qi::grammar<Iterator,fastscan_descriptor()>
+{
+
+	fastscan_fault_parser() : fastscan_fault_parser::base_type(start)
+	{
+		namespace qi = boost::spirit::qi;
+		namespace ascii = boost::spirit::ascii;
+		using qi::lit;
+
+		start %=
+				type >> code >> path_name;
+
+		path_name = -lit('/') >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9/");
+		code = +qi::char_("A-Z");
+		type = qi::char_("01");
+	}
+
+	qi::rule<Iterator, std::string()> path_name;
+	qi::rule<Iterator, std::string()> code;
+	qi::rule<Iterator, char()> type;
+	qi::rule<Iterator, fastscan_descriptor()> start;
+};
+
+template <typename Iterator>
+bool parse_fastscan_faults(Iterator first, Iterator last, std::vector<fastscan_descriptor>& descriptors){
+
+	fastscan_descriptor d;
+	fastscan_fault_parser<Iterator> p;
+
+	//parse library
+	bool parse =  qi::phrase_parse(first, last, p, boost::spirit::ascii::space, d);
+	if (parse){
+		descriptors.push_back(d);
+	}
+	return parse;
+}
+
+void read_fastscan_descriptors(const std::string& file_name, std::vector<fastscan_descriptor>& descriptors);
 
 }
 #endif /* DS_FAULTS_H_ */

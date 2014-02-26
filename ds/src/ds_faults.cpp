@@ -4,6 +4,8 @@
  *  Created on: 31.10.2013
  *      Author: cookao
  */
+#include <iostream>
+#include <fstream>
 #include "ds_faults.h"
 #include "ds_library.h"
 #include "ds_workspace.h"
@@ -261,6 +263,7 @@ void ds_faults::delete_faults(std::map<SAFaultDescriptor*, std::list<SAFaultDesc
 		delete(faults);
 	}
 }
+
 ds_faults::FaultList::FaultList(ds_structural::NetList* nl){
 	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* universe = ds_faults::get_fault_universe(nl);
 	for (auto it=universe->begin();it!=universe->end();it++){
@@ -326,4 +329,20 @@ double ds_faults::FaultList::get_fc() const {
 	double detected = ds.size() + X_WEIGHT * np.size();
 	double fc = detected / total_faults * 100;
 	return fc;
+}
+
+void ds_faults::read_fastscan_descriptors(const std::string& file_name, std::vector<ds_faults::fastscan_descriptor>& descriptors){
+	std::ifstream input(file_name.c_str());
+	std::string line;
+	if (input.is_open()){
+		while (!input.eof()){
+			std::getline(input, line);
+			if (!line.empty()) {
+				parse_fastscan_faults<std::string::iterator>(line.begin(), line.end(), descriptors);
+			}
+		}
+	} else {
+		BOOST_LOG_TRIVIAL(error) << "Error loading fault descriptor file: " << file_name << ". Device not open";
+		BOOST_THROW_EXCEPTION(ds_common::file_read_error() << boost::errinfo_errno(errno));
+	}
 }

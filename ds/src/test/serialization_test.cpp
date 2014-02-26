@@ -27,7 +27,7 @@ void serialization_test::serialize_patterns(const std::string& name) {
 	std::string path = d?d:"";
 	std::string file = path + "/files/" + name + ".wgl";
 	BOOST_LOG_TRIVIAL(info) << "... serializing " << file;
-	ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_pattern_blocks(file, true);
+	ds_pattern::CombinationalPatternProvider* p = ds_pattern::load_combinational_blocks(file, true);
 
 	std::string p_name = path + "/files/" + name + ".dsp";
 

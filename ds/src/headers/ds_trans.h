@@ -117,5 +117,7 @@ namespace ds_trans {
 		out << "end;\n";
 	}
 
+	void fix_nxp(ds_structural::NetList* nl);
+
 }
 #endif /* DS_TRANS_H_ */

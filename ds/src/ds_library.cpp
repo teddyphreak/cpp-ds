@@ -146,13 +146,76 @@ void ds_library::Library::load_nodes(){
 	node = new LGNode3I("mux2",f_mux2);
 	list.push_back(node);
 
-	node = new LGState("FD2");
-	list.push_back(node);
+	std::list<LogicState*> states;
+	LogicState* reg = new LogicState("FD2");
+	list.push_back(reg);
+	states.push_back(reg);
 
 	// fill up prototype registry
 	for (auto it=list.begin();it!=list.end();it++){
 		LogicNode *n = *it;
 		prototypes[n->get_type()] = n;
+	}
+	// fill up register prototype
+	for (auto it=states.begin();it!=states.end();it++){
+		LogicState *s = *it;
+		register_prototypes[s->get_type()] = s;
+	}
+	list.clear();
+	states.clear();
+
+	std::list<TNode*> tlist;
+	TNode *tnode = new TNode1I("not", f_not);
+	tlist.push_back(tnode);
+	tnode = new TNode1I("not1", f_not);
+	tlist.push_back(tnode);
+	tnode = new TNode1I("buf", f_buf);
+	tlist.push_back(tnode);
+	tnode = new TNode1I("buf1", f_buf);
+	tlist.push_back(tnode);
+
+	tnode = new TNode2I("and2", f_and2);
+	tlist.push_back(tnode);
+	tnode = new TNode2I("or2", f_or2);
+	tlist.push_back(tnode);
+	tnode = new TNode2I("nand2", f_nand2);
+	tlist.push_back(tnode);
+	tnode = new TNode2I("nor2", f_nor2);
+	tlist.push_back(tnode);
+	tnode = new TNode2I("xor2", f_xor2);
+	tlist.push_back(tnode);
+	tnode = new TNode2I("xnor2", f_xnor2);
+	tlist.push_back(tnode);
+
+	tnode = new TNode3I("and3", f_and3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("or3",f_or3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("nand3",f_nand3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("nor3",f_nor3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("xor3",f_xor3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("xnor3",f_xnor3);
+	tlist.push_back(tnode);
+	tnode = new TNode3I("mux2",f_mux2);
+	tlist.push_back(tnode);
+
+	std::list<TState*> tstates;
+	TState* treg = new TState("FD2");
+	tlist.push_back(treg);
+	tstates.push_back(treg);
+
+	// fill up prototype registry
+	for (auto it=tlist.begin();it!=tlist.end();it++){
+		TNode *n = *it;
+		tprototypes[n->get_type()] = n;
+	}
+	// fill up register prototype
+	for (auto it=tstates.begin();it!=tstates.end();it++){
+		TState *s = *it;
+		tregister_prototypes[s->get_type()] = s;
 	}
 
 }
@@ -300,8 +363,8 @@ ds_structural::NetList* ds_library::import(const std::string& file, const std::s
 						[&] (const parse_netlist& n) { return (n.nl_name == dep.first) && (n.ports.size()==dep.second);});
 
 				if (parsed == netlists.end()){
-					BOOST_LOG_TRIVIAL(error) << "Design " + toplevel + " not found";
-					BOOST_THROW_EXCEPTION(ds_common::parse_error()	<< ds_common::errmsg_info("Design " + toplevel + " not found"));
+					BOOST_LOG_TRIVIAL(error) <<  "Design (" << dep.first << "," << dep.second << ") not found";
+					BOOST_THROW_EXCEPTION(ds_common::parse_error()	<< ds_common::errmsg_info("Unknown dependency: " + dep.first));
 				}
 
 				// dependency exists in workspace. Query new pending dependencies
@@ -366,13 +429,12 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 	{
 		boost::apply_visitor(aggregate_v, p);				// create inputs
 	}
-	BOOST_LOG_TRIVIAL(trace) << "Inputs processed";
 	aggregate_v.set_port_type(ds_structural::DIR_OUT);
 	for ( ds_library::verilog_declaration p: nl.outputs )
 	{
 		boost::apply_visitor(aggregate_v, p);				// create outputs
 	}
-	BOOST_LOG_TRIVIAL(trace) << "Outputs processed";
+	aggregate_v.set_port_type(ds_structural::DIR_INOUT);
 	for ( ds_library::verilog_declaration p: nl.inouts )
 	{
 		boost::apply_visitor(aggregate_v, p);				// create bidireccional ports
@@ -382,12 +444,10 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 	{
 		boost::apply_visitor(aggregate_v, p);				// create signals
 	}
-	BOOST_LOG_TRIVIAL(trace) << "Signals processed";
 	for ( ds_library::verilog_instance instance: nl.instances )
 	{
 		boost::apply_visitor(instance_v, instance);			// create gates
 	}
-	BOOST_LOG_TRIVIAL(trace) << "Gates processed";
 	for ( ds_library::parse_nl_assignment assignment: nl.assignments )
 	{
 		// handle assignments
@@ -422,9 +482,7 @@ ds_structural::NetList* ds_library::convert(const ds_library::parse_netlist& nl,
 			}
 		}
 	}
-	BOOST_LOG_TRIVIAL(trace) << "Assignments processed";
 	netlist->remove_floating_signals();
-	BOOST_LOG_TRIVIAL(trace) << "...done";
 	return netlist;
 }
 
