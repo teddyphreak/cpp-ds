@@ -1021,6 +1021,8 @@ namespace ds_lg {
 		}
 		virtual void add_register(R* r){
 			registers.push_back(r);
+			registry[r->get_name()] = r;
+			r->set_resolver(this);
 		}
 		virtual void add_node(N* n){
 			nodes.push_back(n);

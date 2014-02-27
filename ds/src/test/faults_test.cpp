@@ -61,7 +61,7 @@ void faults_test::import_faults(const std::string& name) {
 		ds_faults::read_fastscan_descriptors(file, descriptors);
 		BOOST_LOG_TRIVIAL(info) << "Generating fault list: ";
 		ds_faults::FaultList fl(descriptors.begin(), descriptors.end());
-		BOOST_LOG_TRIVIAL(info) << "Verifying... ";
+		BOOST_LOG_TRIVIAL(info) << "# of faults: " << descriptors.size();
 		std::vector<ds_faults::SAFaultDescriptor*> faults;
 		fl.get_undetected_faults(faults);
 
@@ -69,8 +69,6 @@ void faults_test::import_faults(const std::string& name) {
 			std::string port_name = f->port_name;
 			std::string gate_name = f->gate_name;
 			std::size_t marker = port_name.find_first_of('/');
-			BOOST_ASSERT(marker==std::string::npos);
-			marker = gate_name.find_first_of('/');
 			BOOST_ASSERT(marker==std::string::npos);
 		}
 

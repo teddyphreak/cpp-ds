@@ -180,10 +180,17 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	for (SAFaultDescriptor* d:fault_set){
 
 		TNode *node = lg->get_node(d->gate_name);
-		if (node==0)
+		BOOST_LOG_TRIVIAL(trace) << "40" << d->gate_name << " " << node;
+		if (node==0){
 			node = lg->get_node(d->port_name);
+			BOOST_LOG_TRIVIAL(trace) << "400" << d->port_name << " " << node;
+		}
+
+		BOOST_LOG_TRIVIAL(trace) << "41";
 
 		TNode *cp = lg->get_check_point(node);
+
+		BOOST_LOG_TRIVIAL(trace) << "42";
 
 		auto it = check_points.find(cp);
 		std::set<ds_faults::TransitionFault*>* faults = 0;
@@ -193,7 +200,9 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		} else {
 			faults = check_points[cp];						// insert into the available check point entry
 		}
+		BOOST_LOG_TRIVIAL(trace) << "43";
 		ds_faults::TransitionFault *sa = new ds_faults::TransitionFault(lg->get_netlist(), d->gate_name, d->port_name, d->value);
+		BOOST_LOG_TRIVIAL(trace) << "44";
 		fault_map[sa]=d;
 		faults->insert(sa);
 		total++;
@@ -205,10 +214,11 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		ordered_check_points.push_back(it->first);
 	}
 	std::sort(ordered_check_points.begin(), ordered_check_points.end(), [] (const TNode* n1, const TNode* n2) { return (n1->level > n2->level); });
-	BOOST_LOG_TRIVIAL(trace) << "6";
 	//error info
 	ds_common::int64 detected;
 	ds_common::int64 possibly_detected;
+
+	BOOST_LOG_TRIVIAL(trace) << "6";
 
 	//attach observers to the outputs so an error can be identified
 	std::map<TNode*, ds_simulation::TErrorObserver*> output_map;
@@ -222,24 +232,16 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	//repeat for all pattern blocks
 	int c = 0;
 	while (provider->has_next()){
-
-		BOOST_LOG_TRIVIAL(trace) << "7A";
 		ds_pattern::SimPatternBlock *block = provider->next();
 		lg->clear_hooks();
-		BOOST_LOG_TRIVIAL(trace) << "7B";
 		//fault-free simulation
 		lg->sim(block);
-		BOOST_LOG_TRIVIAL(trace) << "7C";
 		//set the expected value in the observers
 		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 			TNode *output = *it;
-			BOOST_LOG_TRIVIAL(trace) << "7E";
 			ds_simulation::TErrorObserver *observer = output_map[output];
-			BOOST_LOG_TRIVIAL(trace) << "7F";
 			ds_lg::driver_v64 s = output->peek();
-			BOOST_LOG_TRIVIAL(trace) << "7G";
 			observer->set_spec(s.value);
-			BOOST_LOG_TRIVIAL(trace) << "7H";
 		}
 		BOOST_LOG_TRIVIAL(trace) << "A";
 		//get the pattern block mask (not all blocks are 64 patterns deep)

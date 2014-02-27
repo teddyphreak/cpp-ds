@@ -50,14 +50,14 @@ void sim_test::test_fc(){
 void sim_test::test_tdf(){
 	BOOST_LOG_TRIVIAL(info) << "TDF Test...";
 	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_faults");
-	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
-	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
-	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
-	fc_tdf_test("p269k_nan_sff.v", "p269k_nan_patterns.wgl", "top", "p269k_nan_faults");
-	fc_tdf_test("p279k_nan_sff.v", "p279k_nan_patterns.wgl", "top", "p279k_nan_faults");
-	fc_tdf_test("p286k_nan_sff.v", "p286k_nan_patterns.wgl", "top", "p286k_nan_faults");
-	fc_tdf_test("p295k_nan_sff.v", "p295k_nan_patterns.wgl", "top", "p295k_nan_faults");
-	fc_tdf_test("p330k_nan_sff.v", "p330k_nan_patterns.wgl", "top", "p330k_nan_faults");
+//	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
+//	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
+//	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
+//	fc_tdf_test("p269k_nan_sff.v", "p269k_nan_patterns.wgl", "top", "p269k_nan_faults");
+//	fc_tdf_test("p279k_nan_sff.v", "p279k_nan_patterns.wgl", "top", "p279k_nan_faults");
+//	fc_tdf_test("p286k_nan_sff.v", "p286k_nan_patterns.wgl", "top", "p286k_nan_faults");
+//	fc_tdf_test("p295k_nan_sff.v", "p295k_nan_patterns.wgl", "top", "p295k_nan_faults");
+//	fc_tdf_test("p330k_nan_sff.v", "p330k_nan_patterns.wgl", "top", "p330k_nan_faults");
 };
 
 void sim_test::test_loc(){
@@ -198,6 +198,7 @@ void sim_test::fc_tdf_test(const std::string& design, const std::string& wgl_fil
 	BOOST_LOG_TRIVIAL(info) << "Importing fault list: " << fault_file;
 	std::vector<ds_faults::fastscan_descriptor> descriptors;
 	ds_faults::read_fastscan_descriptors(fault_file, descriptors);
+	BOOST_LOG_TRIVIAL(info) << descriptors.size() << " faults found";
 	ds_faults::FaultList fl(descriptors.begin(), descriptors.end());
 	BOOST_LOG_TRIVIAL(info) << "Importing pattern file: " << pattern_file;
 	ds_pattern::SequentialPatternProvider* provider = ds_pattern::load_loc_blocks(pattern_file);

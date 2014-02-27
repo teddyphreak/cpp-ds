@@ -115,30 +115,61 @@ public:
 	 * @param p port name in gate
 	 */
 	StaticFault(ds_structural::NetList* nl, std::string g, std::string p):isInput(false),isOutput(false),mask(-1L),gate_name(g),gate_port_name(p){
+		std::cout << "C1" << g << ":" << p << "  " << nl->get_instance_name() << std::endl;
 
-		if (g == nl->get_instance_name()){
+		if (g == nl->get_instance_name() || g.empty()){
+			std::cout << "C2" << std::endl;
 			node_name = p;
 			ds_structural::PortBit *pb = nl->find_port_by_name(p);
+			std::cout << "C3 " << pb << std::endl;
 			if (pb->get_type()==ds_structural::DIR_IN){
 				isInput = true;
 			}
+			std::cout << "C4" << std::endl;
 			if (pb->get_type()==ds_structural::DIR_OUT){
 				isOutput = true;
 			}
+			std::cout << "C5" << std::endl;
 		} else {
 
+			std::cout << "C6" << std::endl;
 			ds_structural::Gate *gate = nl->find_gate(gate_name);
 			node_name = gate_name;
+			std::cout << "C7 " << gate << " " << gate_name << ":" << p << std::endl;
 			//translate port name in the netlist to primitive node name
 
 			node_port_name = gate->get_mapping(gate_port_name);
+			std::cout << "C71 " << node_port_name << " . " << gate_port_name << " : " << gate->get_type() <<std::endl;
 			ds_structural::PortBit *pb = gate->find_port_by_name(gate_port_name);
+
+			/*
+			 * Quick fix for fast scan port madness
+			 */
+
+			if (pb == 0){
+				if (gate_port_name == "A"){
+					pb = gate->find_port_by_name("A1");
+				} else if (gate_port_name == "B"){
+					pb = gate->find_port_by_name("A2");
+					if (pb==0){
+						pb = gate->find_port_by_name("ZN");
+					}
+				} else if (gate_port_name == "Z"){
+					pb = gate->find_port_by_name("ZN");
+				} else if (gate_port_name == "ZN"){
+					pb = gate->find_port_by_name("Z");
+				}
+			}
+
+			std::cout << "C72 " << pb << std::endl;
 			if (pb->get_type()==ds_structural::DIR_IN){
 				isInput = true;
 			}
+			std::cout << "C8" << std::endl;
 			if (pb->get_type()==ds_structural::DIR_OUT){
 				isOutput = true;
 			}
+			std::cout << "C9" << std::endl;
 		}
 	}
 
@@ -274,11 +305,14 @@ public:
 	 */
 	TransitionFault(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):
 		StaticFault<ds_lg::TNode, ds_lg::driver_v64>(nl,g,p), value(ds_common::BIT_X){
+		std::cout << "inside" << std::endl;
 		if (v == ds_common::BIT_0){
 			value = ds_common::BIT_1;
 		} else if (v == ds_common::BIT_1)
 			value = ds_common::BIT_0;
+		std::cout << "condition" << std::endl;
 		add_condition(this,value);
+		std::cout << "after" << std::endl;
 	}
 
 	virtual ds_lg::int64 compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const{
@@ -440,9 +474,15 @@ public:
 				v = ds_common::BIT_0;
 			}
 			std::size_t marker = d.path_name.find_last_of('/');
-			std::string gate_name = d.path_name.substr(0, marker);
-			std::string port_name = d.path_name.substr(marker+1, std::string::npos);
-			SAFaultDescriptor* f = new SAFaultDescriptor(gate_name, port_name, v);
+			SAFaultDescriptor* f = 0;
+			if (marker == std::string::npos){
+				std::string port_name = d.path_name;
+				f = new SAFaultDescriptor("", port_name, v);
+			} else {
+				std::string gate_name = d.path_name.substr(0, marker);
+				std::string port_name = d.path_name.substr(marker+1, std::string::npos);
+				f = new SAFaultDescriptor(gate_name, port_name, v);
+			}
 			uk.insert(f);
 			fault_map[f] = UK;
 		}
@@ -553,9 +593,16 @@ struct fastscan_fault_parser : qi::grammar<Iterator,fastscan_descriptor()>
 		start %=
 				type >> code >> path_name;
 
-		path_name = -lit('/') >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9/");
-		code = +qi::char_("A-Z");
-		type = qi::char_("01");
+		path_name = *lit(' ') >> -lit('/') >> qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9/");
+		code = *lit(' ') >> +qi::char_("A-Z");
+		type = *lit(' ') >> qi::char_("01");
+
+//		path_name.name("path_name");
+//		debug(path_name);
+//		type.name("type");
+//		debug(type);
+//		code.name("code");
+//		debug(code);
 	}
 
 	qi::rule<Iterator, std::string()> path_name;
@@ -571,7 +618,7 @@ bool parse_fastscan_faults(Iterator first, Iterator last, std::vector<fastscan_d
 	fastscan_fault_parser<Iterator> p;
 
 	//parse library
-	bool parse =  qi::phrase_parse(first, last, p, boost::spirit::ascii::space, d);
+	bool parse =  qi::parse(first, last, p, d);
 	if (parse){
 		descriptors.push_back(d);
 	}
