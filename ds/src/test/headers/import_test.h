@@ -23,16 +23,17 @@ namespace import_test {
 	struct import_ts : public boost::unit_test::test_suite
 	{
 		import_ts(const std::string& name):boost::unit_test::test_suite(name)
-	    {;
-	    	circuits_to_test.push_back( "p45k.v" );
-	    	circuits_to_test.push_back( "p100k.v" );
-	    	circuits_to_test.push_back( "p141k.v" );
-	    	circuits_to_test.push_back( "p239k.v" );
-	    	circuits_to_test.push_back( "p259k.v" );
-	    	circuits_to_test.push_back( "p279k.v" );
-	    	circuits_to_test.push_back( "p286k.v" );
-	    	circuits_to_test.push_back( "p295k.v" );
-	    	circuits_to_test.push_back( "p330k.v" );
+	    {
+			circuits_to_test.push_back( "cpu_ip_t03.v" );
+//	    	circuits_to_test.push_back( "p45k.v" );
+//	    	circuits_to_test.push_back( "p100k.v" );
+//	    	circuits_to_test.push_back( "p141k.v" );
+//	    	circuits_to_test.push_back( "p239k.v" );
+//	    	circuits_to_test.push_back( "p259k.v" );
+//	    	circuits_to_test.push_back( "p279k.v" );
+//	    	circuits_to_test.push_back( "p286k.v" );
+//	    	circuits_to_test.push_back( "p295k.v" );
+//	    	circuits_to_test.push_back( "p330k.v" );
 
 	    	chains_to_test.push_back( "p45k.chain_info" );
 	    	chains_to_test.push_back( "p100k.chain_info" );
@@ -45,9 +46,9 @@ namespace import_test {
 	    	chains_to_test.push_back( "p330k.chain_info" );
 
 	        add( BOOST_PARAM_TEST_CASE( &import_netlist, circuits_to_test.begin(), circuits_to_test.end() ) );
-	        add( BOOST_PARAM_TEST_CASE( &parse_verilog, circuits_to_test.begin(), circuits_to_test.end() ) );
-	        add( BOOST_PARAM_TEST_CASE( &dump_verilog, circuits_to_test.begin(), circuits_to_test.end() ) );
-	        add( BOOST_PARAM_TEST_CASE( &import_scan_map, chains_to_test.begin(), chains_to_test.end() ) );
+	      //  add( BOOST_PARAM_TEST_CASE( &parse_verilog, circuits_to_test.begin(), circuits_to_test.end() ) );
+	      //  add( BOOST_PARAM_TEST_CASE( &dump_verilog, circuits_to_test.begin(), circuits_to_test.end() ) );
+	      //  add( BOOST_PARAM_TEST_CASE( &import_scan_map, chains_to_test.begin(), chains_to_test.end() ) );
 	    }
 	    std::list<std::string> circuits_to_test;
 	    std::list<std::string> chains_to_test;

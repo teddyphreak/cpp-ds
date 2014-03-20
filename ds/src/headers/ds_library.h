@@ -10,7 +10,6 @@
 
 #include "ds_common.h"
 #include "ds_lg.h"
-#include "stdio.h"
 #include <fstream>
 #include <map>
 #include <boost/spirit/repository/include/qi_distinct.hpp>
@@ -101,6 +100,10 @@ namespace ds_library {
 	 * @return logic function implemented by gate type
 	 */
 	ds_library::LogicFunction get_function(const std::string& t){
+		std::cout << "SIZE: " << types.size() << std::endl;
+		for (auto it=types.begin();it!=types.end();it++){
+			std::cout << "TYPE " << it->first << " " << it->second << std::endl;
+		}
 		if (types.find(t)!= types.end())
 			return types[t];
 		else
@@ -608,7 +611,7 @@ namespace ds_library {
 	 * @return true if line was successfully parsed
 	 */
 	template <typename Iterator>
-	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, type_map_t types, function_map& functions, inversion_map& inversion, prototype_map_t& prototype_map){
+	bool parse_library(Iterator first, Iterator last, gate_map_t& gates, lgn_map_t& prototypes, type_map_t& types, function_map& functions, inversion_map& inversion, prototype_map_t& prototype_map){
 
 		parse_lib_node n;
 		lib_parser<Iterator> p;

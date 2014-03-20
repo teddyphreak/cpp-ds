@@ -425,7 +425,7 @@ namespace ds_lg {
 
 	void TNode1I::hook() {
 		driver_v64 *sa = a;
-		driver_v64 va = *a;
+		driver_v64 va(*a);
 		a = &va;
 		hook_inputs();
 		sim();
@@ -435,10 +435,10 @@ namespace ds_lg {
 
 	void TNode2I::hook() {
 		driver_v64 *sa = a;
-		driver_v64 va = *a;
+		driver_v64 va(*a);
 		a = &va;
 		driver_v64 *sb = b;
-		driver_v64 vb = *b;
+		driver_v64 vb(*b);
 		b = &vb;
 		hook_inputs();
 		sim();
@@ -449,13 +449,13 @@ namespace ds_lg {
 
 	void TNode3I::hook() {
 		driver_v64 *sa = a;
-		driver_v64 va = *a;
+		driver_v64 va(*a);
 		a = &va;
 		driver_v64 *sb = b;
-		driver_v64 vb = *b;
+		driver_v64 vb(*b);
 		b = &vb;
 		driver_v64 *sc = c;
-		driver_v64 vc = *c;
+		driver_v64 vc(*c);
 		c = &vc;
 		hook_inputs();
 		sim();
@@ -467,19 +467,19 @@ namespace ds_lg {
 
 	void TState::hook() {
 		driver_v64 *sd = d;
-		driver_v64 vd = *d;
+		driver_v64 vd(*d);
 		d = &vd;
 		driver_v64 *srst = rst;
-		driver_v64 vrst = *rst;
+		driver_v64 vrst(*rst);
 		rst = &vrst;
 		driver_v64 *srst_n = rst_n;
-		driver_v64 vrst_n = *rst_n;
+		driver_v64 vrst_n(*rst_n);
 		rst_n = &vrst_n;
 		driver_v64 *sload = load;
 		driver_v64 vload = *load;
 		load = &vload;
 		driver_v64 *sload_n = load_n;
-		driver_v64 vload_n = *load_n;
+		driver_v64 vload_n(*load_n);
 		load_n = &vload_n;
 		hook_inputs();
 		sim();
@@ -493,7 +493,8 @@ namespace ds_lg {
 
 	void TNode::hook_inputs(){
 		for (ds_lg::SimulationHook<TNode> *h : hooks){
-			driver_v64** input_address = get_input(h->get_hook_port());
+			std::string hport = h->get_hook_port();
+			driver_v64** input_address = get_input(hport);
 			if (input_address!=0){
 				driver_v64* p_port = *input_address;
 				if (p_port!=0){
@@ -509,7 +510,7 @@ namespace ds_lg {
 			driver_v64* p_port = get_output(h->get_hook_port());
 			if (p_port!=0){
 				int64 activation = h->hook(resolver);
-				p_port->value.v ^= activation & ~p_port->value.x;
+				p_port->value.v ^= activation;// & ~p_port->value.x;
 			}
 		}
 	}
@@ -554,13 +555,28 @@ namespace ds_lg {
 			TOutputObserver* observer= new TOutputObserver(offset, &pattern_block, &vector_offset);
 			out->add_monitor(observer);
 		}
+		std::size_t scan_offset = adapter->get_scan_offset();
 		for (TState* reg:registers){
 			std::string name = reg->get_name();
-			std::string port_name = name.substr(name.find('/') + 1);
-			std::size_t offset = adapter->get_scan_offset(port_name);
+			std::string cell_name = name.substr(name.find('/') + 1);
+			std::size_t offset = adapter->get_scan_offset(cell_name);
 			reg->set_pattern_block(&pattern_block);
-			reg->set_offset(offset);
+			reg->set_offset(scan_offset + offset);
 		}
 	}
+
+	void TLeveledGraph::setup(){
+		std::vector<TNode*> temp;
+		for (auto it=nodes.begin();it!=nodes.end();it++){
+			TNode *n = *it;
+			if (!n->has_state()){
+				temp.push_back(n);
+			}
+		}
+		nodes.clear();
+		nodes.insert(nodes.begin(), temp.begin(), temp.end());
+		nodes.insert(nodes.begin(), registers.begin(), registers.end());
+	}
+
 }
 

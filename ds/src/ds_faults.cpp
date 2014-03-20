@@ -42,7 +42,7 @@ void ds_faults::get_fault_classes(ds_structural::Gate* g, std::vector<std::list<
 		break;
 	default:
 		//generate all outputs faults if gate type is not found
-		BOOST_LOG_TRIVIAL(trace) << "Generating all port faults for gate: " << gate_type;
+		BOOST_LOG_TRIVIAL(trace) << "Generating all port faults for gate: " << gate_type << " " << f;
 		const ds_structural::port_container *inputs = g->get_inputs();
 		const ds_structural::port_container *outputs = g->get_outputs();
 		ds_faults::get_port_faults(inputs->begin(), inputs->end(), fault_classes);
@@ -324,6 +324,7 @@ void ds_faults::FaultList::set_fault_category(std::string n, std::string p, cons
 	SAFaultDescriptor* f = representatives[d.get_string()];
 	set_fault_category(f, category);
 }
+
 double ds_faults::FaultList::get_fc() const {
 	int total_faults = fault_map.size();
 	double detected = ds.size() + X_WEIGHT * np.size();
@@ -345,4 +346,14 @@ void ds_faults::read_fastscan_descriptors(const std::string& file_name, std::vec
 		BOOST_LOG_TRIVIAL(error) << "Error loading fault descriptor file: " << file_name << ". Device not open";
 		BOOST_THROW_EXCEPTION(ds_common::file_read_error() << boost::errinfo_errno(errno));
 	}
+}
+
+ds_lg::int64 ds_faults::TransitionFault::compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const{
+	ds_lg::lg_v64 v = a->value;
+	ds_lg::lg_v64 t = b.value;
+	const ds_lg::TNode *driver = a->driver;
+	const ds_lg::lg_v64 *p = driver->get_previous_value(a->port_id);
+	ds_lg::int64 cond = ((~p->v & v.v & t.v) | (p->v & ~v.v & ~t.v)) & ~v.x & ~t.x & ~p->x;
+	//std::cout << std::hex << "v:" << v.v << " t:" << t.v << " p:" << p->v << " cond" << cond << std::endl;
+	return cond;
 }

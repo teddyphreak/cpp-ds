@@ -11,9 +11,10 @@
 #include "ds_common.h"
 #include "ds_structural.h"
 #include "ds_pattern.h"
-#include <boost/log/trivial.hpp>
 #include <vector>
 #include <unordered_map>
+#include <boost/log/trivial.hpp>
+#include <boost/array.hpp>
 
 
 namespace ds_faults {
@@ -165,7 +166,7 @@ namespace ds_lg {
 		 * initializes public members. By default the node is not an endpoint.
 		 * @param t node type
 		 */
-		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t){}
+		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t),p(&o){}
 		/*!
 		 * sets the equivalent gate in the netlist
 		 * @param g equivalent gate in the netlist
@@ -189,9 +190,10 @@ namespace ds_lg {
 		 * apply all registered observers
 		 */
 		void observe(){
+
 			for (auto it = monitors.begin();it!=monitors.end();it++){
 				Monitor<T> *m = *it;
-				m->observe(o);		// log any simulation events
+				m->observe(*p);		// log any simulation events
 			}
 		}
 		/*!
@@ -261,7 +263,7 @@ namespace ds_lg {
 		 * reports the primitive value of this node's output
 		 * @return a copy of the value of the node's output
 		 */
-		T peek() const {return o;}
+		virtual T peek() const {return o;}
 		/*!
 		 * sets an internal pointer to the encompasing leveled graph
 		 * @param graph
@@ -288,11 +290,12 @@ namespace ds_lg {
 		void remove_hooks(){
 			hooks.clear();
 		}
-	protected:
+	public:
 		typedef typename std::vector<Monitor<T>*> monitor_container;
 		T o; 						//!< node output
 		bool endpoint;					//!< true if this node is an endpoint
 		std::string type;				//!< node type
+		T* p;
 		monitor_container monitors;		//!< monitor container
 		Resolver<V>* resolver;
 		/*!
@@ -904,7 +907,7 @@ namespace ds_lg {
 		}
 		virtual void tick(){
 			o = *d;
-			o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
+			//o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
 			on = ~o;
 		}
 		/*!
@@ -1133,7 +1136,7 @@ namespace ds_lg {
 		N* get_check_point(N* n){
 			N *fo = n;
 			if (fo->outputs.size()!=0){
-				while (fo->outputs.size()==1){
+				while (fo->outputs.size()==1 && !fo->is_endpoint()){
 					fo = fo->outputs[0];
 				}
 			}
@@ -1192,8 +1195,9 @@ namespace ds_lg {
 			for (N *p:path){
 				p->rollback();
 			}
-			if (n!=node)
+			if (n!=node){
 				return 0;
+			}
 
 			ds_common::int64 result = resolve(ff, faulty);
 			return result;
@@ -1222,7 +1226,8 @@ namespace ds_lg {
 				iteration++;
 				for (auto it=level->begin();it!=level->end();it++){
 					N *n = *it;
-					if (n->propagate(true)){
+					bool p = n->propagate(true);
+					if (p){
 						for (N *o : n->outputs){
 							auto s = set.find(o);
 							if (s==set.end()){
@@ -1242,6 +1247,7 @@ namespace ds_lg {
 				level->clear();
 			}
 		}
+
 
 	protected:
 		int num_levels;										//!< number of levels in the graph
@@ -1270,8 +1276,6 @@ namespace ds_lg {
 
 		void adapt(const ds_pattern::CombinationalPatternAdapter* adapter);
 
-	//	virtual void sim(ds_pattern::SimPatternBlock *pb);
-
 	protected:
 
 		ds_common::int64 resolve(const lg_v64& ff, const lg_v64& faulty) const {
@@ -1284,17 +1288,20 @@ namespace ds_lg {
 
 	struct driver_v64 {
 		lg_v64 value;
-		const TNode* driver;
+		TNode* driver;
+		short port_id;
 
-		driver_v64():value(0L,-1L),driver(0){}
+		driver_v64():value(0L,-1L),driver(0),port_id(-1){}
 
-		driver_v64(const lg_v64& v):value(v),driver(0){}
+		driver_v64(const lg_v64& v):value(v),driver(0), port_id(-1){}
 
-		driver_v64(const lg_v64& v, const TNode* node):value(v),driver(node){}
+		driver_v64(const lg_v64& v, TNode* node, const short id):value(v),driver(node),port_id(id){}
 
-		driver_v64(const ds_common::int64 v, const ds_common::int64 x):value(v,x), driver(0){}
+		driver_v64(const ds_common::int64 v, const ds_common::int64 x):value(v,x), driver(0), port_id(-1){}
 
-		driver_v64(const ds_common::int64 v, const ds_common::int64 x, const TNode* node):value(v,x), driver(node){}
+		driver_v64(const ds_common::int64 v, const ds_common::int64 x, TNode* node, const short id):value(v,x), driver(node), port_id(id){}
+
+		driver_v64(const driver_v64& val): value(val.value), driver(val.driver), port_id(val.port_id){}
 
 		driver_v64 operator~() const{
 			lg_v64 o;
@@ -1314,7 +1321,7 @@ namespace ds_lg {
 
 		driver_v64& operator&=(const driver_v64& rhs){
 			value.v &= rhs.value.v;
-			value.x = (value.x & ~rhs.value.x & ~rhs.value.v) | (rhs.value.x & ~value.v & ~value.x);
+			value.x = (value.x & ~rhs.value.x & rhs.value.v) | (rhs.value.x &  ~value.x & value.v);
 			return *this;
 		}
 		/*!
@@ -1324,7 +1331,7 @@ namespace ds_lg {
 		 */
 		driver_v64& operator|=(const driver_v64& rhs){
 			value.v |= rhs.value.v;
-			value.x = (value.x & ~rhs.value.x & rhs.value.v) | (rhs.value.x & value.v &value.x);
+			value.x = (value.x & ~rhs.value.x & ~rhs.value.v) | (rhs.value.x & value.x & ~value.v );
 			return *this;
 		}
 		/*!
@@ -1379,8 +1386,9 @@ namespace ds_lg {
 		 * @param v simulation value
 		 */
 		virtual void observe(const driver_v64& v) {
-			(*pb)->values[offset].v = v.value.v;
-			(*pb)->values[offset].x = v.value.x;
+			int o = *voffset + offset;
+			(*pb)->values[o].v = v.value.v;
+			(*pb)->values[o].x = v.value.x;
 		}
 	};
 	class TNode : public LGNode<driver_v64, TNode>{
@@ -1392,11 +1400,14 @@ namespace ds_lg {
 	TNode(const std::string &t):LGNode<driver_v64,TNode>(t){
 		o.value = lg_v64(0L,-1L);
 		o.driver = this;
+		o.port_id = 0;
 	}
 	/*!
 	 * revert output to previous value
 	 */
-	virtual void rollback(){o.value = bo;}
+	virtual void rollback(){
+		o.value = bo;
+	}
 	/*!
 	 * save the output value of the base simulation
 	 */
@@ -1416,6 +1427,9 @@ namespace ds_lg {
 	void flip_and_observe(){
 		flip();
 		observe();
+	}
+	void virtual mark_clock_cycle(){
+		previous = o.value;
 	}
 	/*!
 	 * Simulation primitives are created according to the prototype design pattern.
@@ -1447,9 +1461,10 @@ namespace ds_lg {
 		return false;
 	}
 
-	virtual const lg_v64* get_previous_value(const driver_v64 *p) const {
-		if (p == &o)
+	virtual const lg_v64* get_previous_value(const short id) const {
+		if (id == 0){
 			return &previous;
+		}
 		return 0;
 	}
 
@@ -1488,7 +1503,6 @@ namespace ds_lg {
 		 * simulation value is forwarded form input to output
 		 */
 		virtual void sim() {
-			previous = o.value;
 			o.value = a->value;
 		}
 		/*!
@@ -1539,9 +1553,9 @@ namespace ds_lg {
 		 * copies the simulation values from the pattern block to this input
 		 */
 		virtual void sim() {
-			previous = o.value;
-			o.value.v = (*pb)->values[offset + *vector_offset].v;
-			o.value.x = (*pb)->values[offset + *vector_offset].x;
+			std::size_t idx = offset + *vector_offset;
+			o.value.v = (*pb)->values[idx].v;
+			o.value.x = (*pb)->values[idx].x;
 		}
 		/*!
 		 * simulation value is forwarded form input to output. Faults are injected
@@ -1597,7 +1611,6 @@ namespace ds_lg {
 		 * Simulation primitive for single-input gates
 		 */
 		virtual void sim() {
-			previous = o.value;
 			o.value = (*A)(&a->value);
 		}
 		/*!
@@ -1635,7 +1648,6 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 2 inputs
 		 */
 		virtual void sim() {
-			previous = o.value;
 			o.value = (*A)(&a->value,&b->value);
 			return;
 		}
@@ -1676,7 +1688,6 @@ namespace ds_lg {
 		 * calculate output value by evaluating simulation function with 3 inputs
 		 */
 		virtual void sim() {
-			previous = o.value;
 			o.value = (*A)(&a->value,&b->value,&c->value);
 		}
 		/*!
@@ -1702,10 +1713,11 @@ namespace ds_lg {
 		virtual driver_v64** get_input(const std::string& name);
 	};
 	class TState : public TNode {
-	protected:
+	public:
 		driver_v64 * d;		//!< data input
 		driver_v64 * cd;	//!< clk input
 		driver_v64 o_n;		//!< not Q output
+		driver_v64 o_int;		//!< intermediate value
 		lg_v64 previous_n;
 		driver_v64 * rst;
 		driver_v64 * rst_n;
@@ -1717,28 +1729,33 @@ namespace ds_lg {
 		driver_v64 zero;
 		ds_pattern::SimPatternBlock** pb;
 		std::size_t offset;
+		boost::array<const lg_v64*,2> output_array;
 
 
 	public:
-		TState(const std::string& t):TNode(t), o_n(0,-1L,this), one(-1L,0,this), zero(0,0,this){
+		TState(const std::string& t):TNode(t), o_n(0,-1L,this,1), o_int(0,-1L,this,1), one(-1L,0,this,-1), zero(0,0,this,-1){
 			rst = &zero;
 			rst_n = &one;
 			load = &zero;
 			load_n = &one;
+			output_array[0] = &previous;
+			output_array[1] = &previous_n;
+			endpoint = true;
+			p = d;
 		}
+
+		virtual driver_v64 peek() const {return *d;}
+
 		/*!
 		 * update outputs when clk event is active
 		 */
-		virtual void sim() {
-			previous = o.value;
-			previous_n = o_n.value;
-			o.value = (o.value & ~rst->value & rst_n->value) | (load->value | ~load_n->value);
-			o_n.value = ~o.value;
-		}
+		virtual void sim() {}
+
 		virtual void tick(){
+			mark_clock_cycle();
 			o.value = d->value;
-			o.value = (o.value & ~rst->value & rst_n->value) | (load->value | ~load_n->value);
 			o_n.value = ~o.value;
+			bo = o.value;
 		}
 		/*!
 		 * Simulation primitive state gates. Faults are injected
@@ -1776,7 +1793,8 @@ namespace ds_lg {
 		 */
 		virtual bool has_state() {return true;}
 		void scan(){
-			o.value = (*pb)->values[offset];
+			o.value.v = (*pb)->values[offset].v;
+			o.value.x = (*pb)->values[offset].x;
 		}
 		void set_offset(const std::size_t reg_offset){
 			offset = reg_offset;
@@ -1784,12 +1802,15 @@ namespace ds_lg {
 		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){
 			pb = pattern_block;
 		}
-		virtual const lg_v64* get_previous_value(const driver_v64 *p) const {
-			if (p == &o)
-				return &previous;
-			if (p == &o_n)
-				return &previous_n;
-			return 0;
+		void virtual mark_clock_cycle(){
+			previous = o.value;
+			previous_n = o_n.value;
+		}
+		virtual const lg_v64* get_previous_value(const short id) const {
+			return output_array[id];
+		}
+		virtual TNode* get_driver_node() const {
+			return d->driver;
 		}
 		/*!
 		 * Virtual destructor
@@ -1799,6 +1820,7 @@ namespace ds_lg {
 
 	class TLeveledGraph : public GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>{
 		typedef std::vector<TNode*> lg_node_container;
+
 	public:
 
 		TLeveledGraph():vector_offset(0){
@@ -1806,15 +1828,18 @@ namespace ds_lg {
 			constant_1 = lg_v64(-1L,0L);
 			constant_X = lg_v64(0L,-1L);
 		}
-	protected:
 
+	protected:
 
 		std::size_t vector_offset;
 		ds_common::int64 resolve(const driver_v64& ff, const driver_v64& faulty) const {
-			return ~ff.value.x & ~faulty.value.x & (ff.value.v ^ faulty.value.v);
+			ds_common::int64 diff = (ff.value.v ^ faulty.value.v);
+			return ~ff.value.x & ~faulty.value.x & diff;
 		}
 
 	public:
+
+		void setup();
 
 		void adapt(const ds_pattern::SequentialPatternAdapter* adapter);
 
@@ -1835,24 +1860,27 @@ namespace ds_lg {
 			pattern_block = pb;
 			reset_offset();
 			scan();
+
 			//propagates events from inputs to outputs --> LAUNCH
 			for (auto it=nodes.begin();it!=nodes.end();it++){
 				TNode *n = *it;
 				n->propagate(false);
+				if (!n->has_state()){
+					n->mark_clock_cycle();
+				}
 			}
+
 			clocks[0].tick();
+
+			next_vector();
 			//propagates events from inputs to outputs --> CAPTURE
 			for (auto it=nodes.begin();it!=nodes.end();it++){
 				TNode *n = *it;
 				n->propagate(false);
-				n->mark();
+				if (!n->has_state()){
+					n->mark();
+				}
 			}
-			//inject hooks
-			for (SimulationHook<TNode>* h: hooks){
-				TNode *node = h->get_hook_node(this);
-				push_node(node);
-			}
-			sim_intermediate();
 		}
 	};
 }

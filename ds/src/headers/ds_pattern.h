@@ -9,7 +9,6 @@
 #define DS_PATTERN_H_
 
 #include "ds_common.h"
-#include "stdio.h"
 #include <fstream>
 #include <map>
 #include <unordered_map>
@@ -383,7 +382,7 @@ namespace ds_pattern {
 	 * Values in a test pattern
 	 */
 	class PatternValue {
-	private:
+	public:
 		boost::dynamic_bitset<> v;		//!< logic values
 		boost::dynamic_bitset<> x;		//!< x mask
 	public:
@@ -413,7 +412,7 @@ namespace ds_pattern {
 		}
 
 		/*!
-		 * returns the pattern value in a specified ofset position
+		 * returns the pattern value in a specified offset position
 		 */
 		ds_common::Value get(int pos) const {
 			if(x[pos]==1){
@@ -543,6 +542,7 @@ namespace ds_pattern {
 		virtual int get_port_offset(const std::string& name) const = 0;
 		virtual int get_port_offset(const std::size_t& vector, const std::string& name) const = 0;
 		virtual int get_scan_offset(const std::string& name) const = 0;
+		virtual int get_scan_offset() const = 0;
 		virtual std::string get_name(const int& idx) const = 0;
 	};
 
@@ -670,11 +670,7 @@ namespace ds_pattern {
 				const std::unordered_map<std::string, std::string>& value_map, const std::size_t& total_cells):
 					c(container),om(offset_map),vm(value_map), tc(total_cells){}
 
-		void operator()(const ds_pattern::vector& v){
-			PatternValue ports = transform(v.port_data, v.port_data.size(), 0);
-			ds_pattern::ate_cycle cycle(ports, v.timeplate);
-			c->push_back(cycle);
-		}
+		void operator()(const ds_pattern::vector& v);
 		void operator()(const ds_pattern::scan& s);
 	};
 
@@ -686,12 +682,12 @@ public:
 		virtual int get_port_offset(const std::string& name) const;
 		virtual int get_scan_offset(const std::string& name) const;
 		virtual std::string get_name(const int& idx) const;
+		virtual int get_scan_offset() const {return 2*(num_inputs + num_outputs);}
 
 		virtual unsigned int get_num_inputs() const {return num_inputs;}
 		virtual unsigned int get_num_outputs() const {return num_outputs;}
 		virtual unsigned int get_output_offset() const {return 2*num_inputs + num_outputs;}
 		virtual unsigned int get_num_scan_cells() const {return cells.size();}
-		virtual unsigned int get_scan_offset() const {return 2*(num_inputs + num_outputs);}
 
 		virtual bool has_next() const {return blockIndex != values.size();}
 		virtual void reset() {blockIndex = 0;}
@@ -709,8 +705,10 @@ public:
 		std::vector<SimPatternBlock> values;
 		std::vector<std::string> ports;
 		std::vector<std::string> cells;
-		void set_values(const std::size_t& slot, const std::size_t& offset, const PatternValue pv, SimPatternBlock& block);
-
+		void set_values(const std::size_t& slot, const std::size_t& offset,
+				const PatternValue pv, SimPatternBlock& block);
+		void set_values(const std::size_t& slot, const std::size_t& block_offset,
+				const PatternValue pv, const std::size_t& pattern_offset, const std::size_t& length, SimPatternBlock& block);
 		friend class boost::serialization::access;
 		template<class Archive>
 		void serialize(Archive & ar, const unsigned int version){

@@ -107,12 +107,19 @@ namespace ds_trans {
 
 	template <class T>
 	void print_capture(T& out, const TimeplateDesc& tp){
-		out << "procedure capture = \n";
+		out << "procedure capture clk = \n";
 		out << "\ttimeplate " << tp.tp_name << ";\n";
+
+		out << "\tcycle = \n";
+		out << "\t\tforce_pi;\n";
+		out << "\t\tforce se 0;\n";
+		out << "\t\tpulse clk;\n";
+		out << "\tend;\n\n";
+
 		out << "\tcycle = \n";
 		out << "\t\tforce_pi;\n";
 		out << "\t\tmeasure_po;\n";
-		out << "\t\tpulse_capture_clock;\n";
+		out << "\t\tpulse clk;\n";
 		out << "\tend;\n";
 		out << "end;\n";
 	}

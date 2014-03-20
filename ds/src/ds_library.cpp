@@ -10,7 +10,6 @@
 #include "ds_workspace.h"
 #include <iostream>
 #include <fstream>
-#include <errno.h>
 #include <stack>
 #include <boost/exception/all.hpp>
 #include <boost/spirit/include/qi.hpp>
@@ -566,6 +565,7 @@ void ds_library::instance_visitor::operator()(const ds_library::parse_nl_implici
 		for (ds_structural::signal_map_t::iterator si = nl->signals.begin();si!=nl->signals.end();si++){
 			ds_structural::Signal *s = si->second;
 			s->set_name(implicit.name + "/" + s->get_instance_name());
+
 			netlist->add_signal(s);
 		}
 		nl->signals.clear();

@@ -43,15 +43,12 @@ protected:
 	ds_common::int64 *ds;
 	ds_common::int64 *np;
 public:
+
+	std::string tag;
+
 	TErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
 
-	virtual void observe(const ds_lg::driver_v64& v) {
-		ds_common::int64 detected = (~spec.x & ~v.value.x & spec.v & ~v.value.v) | (~spec.x & ~v.value.x & ~spec.v & v.value.v);
-		*ds |= detected;
-
-		ds_common::int64 possibly_detected = ~spec.x & v.value.x;
-		*np |= (possibly_detected & ~detected);
-	}
+	virtual void observe(const ds_lg::driver_v64& v);
 
 	void set_spec(const ds_lg::lg_v64& s){
 		spec.v = s.v;

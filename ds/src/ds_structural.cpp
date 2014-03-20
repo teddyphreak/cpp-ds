@@ -312,6 +312,7 @@ ds_lg::TLeveledGraph* ds_structural::NetList::get_loc_graph(ds_library::Library 
 	ds_lg::TOutput out;
 	build_leveled_graph(lg,node_map,state_map,in,out);
 	bool c = lg->sanity_check();
+	lg->setup();
 	if (!c){
 		BOOST_LOG_TRIVIAL(warning) << "Sanity check failed";
 	}
@@ -458,6 +459,8 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::GenericLeveledGraph<N,R,
 		}
 	}
 
+
+
 	BOOST_LOG_TRIVIAL(trace) << "6";
 
 	std::vector<N*> l;
@@ -475,7 +478,7 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::GenericLeveledGraph<N,R,
 	}
 	builder->set_levels(max_level + 1);
 
-	BOOST_LOG_TRIVIAL(trace) << "7: " << max_level;
+	BOOST_LOG_TRIVIAL(trace) << "7";
 
 	// build level map and fill level map with inputs and outputs
 	std::map<int, std::set<N*>* > level_map;

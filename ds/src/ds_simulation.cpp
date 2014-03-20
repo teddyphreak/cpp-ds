@@ -163,34 +163,29 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 }
 
 void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_faults::FaultList* fl, ds_pattern::SequentialPatternProvider* provider){
-	BOOST_LOG_TRIVIAL(trace) << "1";
+
 	//adapt pattern provider to leveled graph
 	lg->adapt(provider);
-	BOOST_LOG_TRIVIAL(trace) << "2";
+
 	//get undetected faults
 	std::set<SAFaultDescriptor*> fault_set;
 	fl->get_undetected_faults(fault_set);
-	BOOST_LOG_TRIVIAL(trace) << "3";
+
 	//the check points are inputs, outputs or fanount nodes. The values of the map are the faults dominated by
 	//the corresponding check point
 	std::map<TNode*, std::set<ds_faults::TransitionFault*>* > check_points;
 	std::map<ds_faults::TransitionFault*, SAFaultDescriptor*> fault_map;
 	int total = 0;
-	BOOST_LOG_TRIVIAL(trace) << "4";
+
 	for (SAFaultDescriptor* d:fault_set){
 
 		TNode *node = lg->get_node(d->gate_name);
-		BOOST_LOG_TRIVIAL(trace) << "40" << d->gate_name << " " << node;
+
 		if (node==0){
 			node = lg->get_node(d->port_name);
-			BOOST_LOG_TRIVIAL(trace) << "400" << d->port_name << " " << node;
 		}
 
-		BOOST_LOG_TRIVIAL(trace) << "41";
-
 		TNode *cp = lg->get_check_point(node);
-
-		BOOST_LOG_TRIVIAL(trace) << "42";
 
 		auto it = check_points.find(cp);
 		std::set<ds_faults::TransitionFault*>* faults = 0;
@@ -200,14 +195,12 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		} else {
 			faults = check_points[cp];						// insert into the available check point entry
 		}
-		BOOST_LOG_TRIVIAL(trace) << "43";
 		ds_faults::TransitionFault *sa = new ds_faults::TransitionFault(lg->get_netlist(), d->gate_name, d->port_name, d->value);
-		BOOST_LOG_TRIVIAL(trace) << "44";
 		fault_map[sa]=d;
 		faults->insert(sa);
 		total++;
 	}
-	BOOST_LOG_TRIVIAL(trace) << "5";
+
 	// order check points: for now irrelevant
 	std::vector<TNode*> ordered_check_points;
 	for (auto it=check_points.begin();it!=check_points.end();it++){
@@ -218,9 +211,7 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	ds_common::int64 detected;
 	ds_common::int64 possibly_detected;
 
-	BOOST_LOG_TRIVIAL(trace) << "6";
-
-	//attach observers to the outputs so an error can be identified
+	//attach observers to the outputs and errors so an error can be identified
 	std::map<TNode*, ds_simulation::TErrorObserver*> output_map;
 	for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 		TNode *o = *it;
@@ -228,14 +219,29 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		output_map[o] = observer;
 		o->add_monitor(observer);
 	}
-	BOOST_LOG_TRIVIAL(trace) << "7";
+	for (auto it=lg->registers.begin(); it!=lg->registers.end();it++){
+		ds_lg::TState *r = *it;
+		TNode *d = r->get_driver_node();
+		ds_simulation::TErrorObserver *observer = new ds_simulation::TErrorObserver(&detected, &possibly_detected);
+		observer->tag = d->get_name();
+		output_map[d] = observer;
+		d->add_monitor(observer);
+	}
+
 	//repeat for all pattern blocks
+	std::set<TNode*> total_cp;
 	int c = 0;
+
+	int total_detected = 0;
+
 	while (provider->has_next()){
 		ds_pattern::SimPatternBlock *block = provider->next();
+
 		lg->clear_hooks();
 		//fault-free simulation
+
 		lg->sim(block);
+
 		//set the expected value in the observers
 		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 			TNode *output = *it;
@@ -243,11 +249,19 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 			ds_lg::driver_v64 s = output->peek();
 			observer->set_spec(s.value);
 		}
-		BOOST_LOG_TRIVIAL(trace) << "A";
+
+		for (auto it=lg->registers.begin(); it!=lg->registers.end();it++){
+			ds_lg::TState *r = *it;
+			TNode *d = r->get_driver_node();
+			ds_simulation::TErrorObserver *observer = output_map[d];
+			ds_lg::driver_v64 s = d->peek();
+			observer->set_spec(s.value);
+		}
+
 		//get the pattern block mask (not all blocks are 64 patterns deep)
 		ds_common::int64 mask = block->mask;
 
-		BOOST_LOG_TRIVIAL(trace) << "Pattern block " << (c++);
+		BOOST_LOG_TRIVIAL(info) << "Pattern block " << std::dec << (c++);
 
 		//evaluate each check point
 		for (auto it=ordered_check_points.begin();it!=ordered_check_points.end();it++){
@@ -264,31 +278,41 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 			//check if all faults in this check point have been detected
 			if (cp_faults->size()==0)
 				continue;
-			BOOST_LOG_TRIVIAL(trace) << "B";
+
 			//flip the fault-free value and apply any monitors (required for fanout nodes)
 			cp->flip_and_observe();
 			//queue all check point outputs for intermediate simulation
 			for (TNode* o:cp->outputs){
 				lg->push_node(o);
 			}
-			BOOST_LOG_TRIVIAL(trace) << "C";
+
 			//intermediate simulation
 			lg->sim_intermediate();
-			BOOST_LOG_TRIVIAL(trace) << "D";
+
 			//reset check point to fault-free state
 			cp->rollback();
-			// save the error information (it could be indirectly modified later)
+
 			ds_common::int64 a = detected & mask;
 			ds_common::int64 b = possibly_detected & mask;
-			BOOST_LOG_TRIVIAL(trace) << "E";
+
 			if (a !=0 || b!=0){
+
+				if (a!=0){
+					if (total_cp.find(cp) == total_cp.end())
+						total_cp.insert(cp);
+				}
 
 				for (auto f_it=cp_faults->begin();f_it!=cp_faults->end();){
 
 					ds_faults::TransitionFault *f = *f_it;
+
+					bool show = false;
+
 					ds_faults::SAFaultDescriptor* d = fault_map[f];
+
 					//propagate fault to check point
 					ds_common::int64 obs = lg->propagate_to_check_point(f);
+
 					//check if the fault is propagated AND an error is detected
 					if ((obs & a) !=0){
 						cp_faults->erase(f_it++);
@@ -303,7 +327,8 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 			}
 		}
 	}
-	BOOST_LOG_TRIVIAL(trace) << "8";
+	std::cout << "CP: " << total_cp.size() << " / " << ordered_check_points.size() << " Detected:" << total_detected << std::endl;
+
 	// delete allocated objects
 	for (auto it=output_map.begin();it!=output_map.end();it++){
 
@@ -324,5 +349,11 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	check_points.clear();
 }
 
+void ds_simulation::TErrorObserver::observe(const ds_lg::driver_v64& v) {
+		ds_common::int64 detected = (~spec.x & ~v.value.x & spec.v & ~v.value.v) | (~spec.x & ~v.value.x & ~spec.v & v.value.v);
+		*ds |= detected;
 
+		ds_common::int64 possibly_detected = ~spec.x & v.value.x;
+		*np |= (possibly_detected & ~detected);
+	}
 

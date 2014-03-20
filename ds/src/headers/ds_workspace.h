@@ -33,7 +33,7 @@ namespace ds_workspace {
 		 * entry point
 		 * @return active workspace pointer
 		 */
-		static Workspace *get_workspace(){
+		static Workspace* get_workspace(){
 			if (instance == 0)
 				instance = new Workspace();
 			return instance;

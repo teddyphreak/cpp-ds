@@ -60,7 +60,7 @@ namespace ds_common {
 		 */
 		lg_v64& operator&=(const lg_v64& rhs){
 			v &= rhs.v;
-			x = (x & ~rhs.x & ~rhs.v) | (rhs.x & ~v & ~x);
+			x = (x & ~rhs.x & rhs.v) | (rhs.x & ~x & v);
 			return *this;
 		}
 		/*!
@@ -70,7 +70,7 @@ namespace ds_common {
 		 */
 		lg_v64& operator|=(const lg_v64& rhs){
 			v |= rhs.v;
-			x = (x & ~rhs.x & rhs.v) | (rhs.x & v &x);
+			x = (x & ~rhs.x & ~rhs.v) | (rhs.x & x & ~v);
 			return *this;
 		}
 		/*!

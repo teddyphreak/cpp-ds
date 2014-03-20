@@ -115,31 +115,21 @@ public:
 	 * @param p port name in gate
 	 */
 	StaticFault(ds_structural::NetList* nl, std::string g, std::string p):isInput(false),isOutput(false),mask(-1L),gate_name(g),gate_port_name(p){
-		std::cout << "C1" << g << ":" << p << "  " << nl->get_instance_name() << std::endl;
 
 		if (g == nl->get_instance_name() || g.empty()){
-			std::cout << "C2" << std::endl;
 			node_name = p;
 			ds_structural::PortBit *pb = nl->find_port_by_name(p);
-			std::cout << "C3 " << pb << std::endl;
 			if (pb->get_type()==ds_structural::DIR_IN){
 				isInput = true;
 			}
-			std::cout << "C4" << std::endl;
 			if (pb->get_type()==ds_structural::DIR_OUT){
 				isOutput = true;
 			}
-			std::cout << "C5" << std::endl;
 		} else {
 
-			std::cout << "C6" << std::endl;
 			ds_structural::Gate *gate = nl->find_gate(gate_name);
 			node_name = gate_name;
-			std::cout << "C7 " << gate << " " << gate_name << ":" << p << std::endl;
-			//translate port name in the netlist to primitive node name
-
 			node_port_name = gate->get_mapping(gate_port_name);
-			std::cout << "C71 " << node_port_name << " . " << gate_port_name << " : " << gate->get_type() <<std::endl;
 			ds_structural::PortBit *pb = gate->find_port_by_name(gate_port_name);
 
 			/*
@@ -161,15 +151,12 @@ public:
 				}
 			}
 
-			std::cout << "C72 " << pb << std::endl;
 			if (pb->get_type()==ds_structural::DIR_IN){
 				isInput = true;
 			}
-			std::cout << "C8" << std::endl;
 			if (pb->get_type()==ds_structural::DIR_OUT){
 				isOutput = true;
 			}
-			std::cout << "C9" << std::endl;
 		}
 	}
 
@@ -305,23 +292,14 @@ public:
 	 */
 	TransitionFault(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):
 		StaticFault<ds_lg::TNode, ds_lg::driver_v64>(nl,g,p), value(ds_common::BIT_X){
-		std::cout << "inside" << std::endl;
 		if (v == ds_common::BIT_0){
 			value = ds_common::BIT_1;
 		} else if (v == ds_common::BIT_1)
 			value = ds_common::BIT_0;
-		std::cout << "condition" << std::endl;
 		add_condition(this,value);
-		std::cout << "after" << std::endl;
 	}
 
-	virtual ds_lg::int64 compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const{
-		ds_lg::lg_v64 v = a->value;
-		ds_lg::lg_v64 t = b.value;
-		const ds_lg::TNode *driver = a->driver;
-		const ds_lg::lg_v64 *p = driver->get_previous_value(a);
-		return ~(v.v ^ t.v) & (p->v ^ v.v) & ~v.x & ~t.x & ~p->x  ;
-	}
+	virtual ds_lg::int64 compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const;
 
 	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
 		if (v==ds_common::BIT_0){
@@ -330,6 +308,16 @@ public:
 			return ds_lg::driver_v64(-1L,0L);
 		}
 		return ds_lg::driver_v64(0L,-1L);
+	}
+
+	std::string get_string(){
+		std::string s = node_name + "/" + node_port_name + "@";
+		if (value == ds_common::BIT_0)
+			return s + "0";
+		else if (value == ds_common::BIT_1)
+			return s + "1";
+		else
+			return s + "X";
 	}
 };
 
@@ -483,6 +471,7 @@ public:
 				std::string port_name = d.path_name.substr(marker+1, std::string::npos);
 				f = new SAFaultDescriptor(gate_name, port_name, v);
 			}
+			representatives[f->get_string()] = f;
 			uk.insert(f);
 			fault_map[f] = UK;
 		}
@@ -507,6 +496,7 @@ public:
 			SAFaultDescriptor* d = representatives[fault];
 			return fault_map[d];
 		}
+		return ds_faults::UK;
 	}
 	/*!
 	 * sets the fault category of the descriptor corresponding to the provided structural netlist data

@@ -25,7 +25,7 @@ void import_test::import_netlist(const std::string& name) {
 
 		std::string file = path + "/files/" + name;
 		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
-		nl = ds_workspace::load_netlist("top", file);
+		nl = ds_workspace::load_netlist("cpu_ip", file);
 		BOOST_ASSERT(nl!=0);
 		BOOST_CHECK(nl->check_netlist());
 		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);

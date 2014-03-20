@@ -75,12 +75,9 @@ ds_pattern::CombinationalPatternProvider* ds_pattern::load_combinational_blocks(
 
 ds_pattern::SequentialPatternProvider* ds_pattern::load_loc_blocks(const std::string& file){
 	ds_pattern::scan_data data;
-	ds_pattern::parse_transition_wgl(file, data);
-	BOOST_LOG_TRIVIAL(info) << "wgl parsed";
+	ds_pattern::parse_transition_wgl(file, data);;
 	ds_pattern::SequentialPatternList pl(data);
-	BOOST_LOG_TRIVIAL(info) << "pattern list generated";
 	ds_pattern::SequentialPatternProvider* pattern_blocks = new ds_pattern::SequentialPatternProvider(pl);
-	BOOST_LOG_TRIVIAL(info) << "provider";
 	return pattern_blocks;
 }
 
@@ -221,14 +218,15 @@ ds_pattern::SequentialPatternList::SequentialPatternList(const scan_data& sd):nu
 
 	setup_ports(sd);
 	std::unordered_map<std::string, std::string> value_map;
+	std::unordered_map<std::string, int> group_offset;
 	std::unordered_map<std::string, int> chain_offset;
 
-	for (std::size_t i=0;i<sd.chains.size();i++){
-		ds_pattern::scan_chain scan_chain = sd.chains[i];
-		cell_order.push_back(scan_chain.elements);
-		chain_offset[scan_chain.name] = num_scan_cells;
-		cell_names.insert(cell_names.begin(), scan_chain.elements.begin(), scan_chain.elements.end());
-		num_scan_cells += scan_chain.elements.size();
+	for (std::size_t i=0;i<sd.cell_groups.size();i++){
+		ds_pattern::scan_cells scan_cells = sd.cell_groups[i];
+		cell_order.push_back(scan_cells.cells);
+		group_offset[scan_cells.group] = num_scan_cells;
+		cell_names.insert(cell_names.end(), scan_cells.cells.begin(), scan_cells.cells.end());
+		num_scan_cells += scan_cells.cells.size();
 	}
 
 	for (std::size_t i=0;i<cell_names.size();i++){
@@ -237,6 +235,7 @@ ds_pattern::SequentialPatternList::SequentialPatternList(const scan_data& sd):nu
 
 	for (std::size_t i=0;i<sd.states.size();i++){
 		ds_pattern::scan_state state = sd.states[i];
+		chain_offset[state.id] = group_offset[state.group];
 		value_map[state.id] = state.data;
 	}
 
@@ -251,19 +250,18 @@ void ds_pattern::sequential_extractor::operator()(const ds_pattern::scan& v) {
 	PatternValue ports = ds_pattern::transform(v.port_data, v.port_data.size(), 0);
 	for (ds_pattern::scan_directive d:v.directives){
 		int offset = 0;
-		if (d.direction == "output")
+		if (d.direction == "output"){
 			offset = tc;
-
-		auto name_it = om.find(d.chain_name);
-		if (name_it != om.end()){
-			offset += name_it->second;
-		} else {
-			BOOST_LOG_TRIVIAL(error) << "Scan chain name not found: " << d.chain_name;
 		}
+
 		auto data_it = vm.find(d.chain_data);
 		if (data_it != vm.end()){
 			std::string data = data_it->second;
-			ds_pattern::transform(data, scan, offset);
+			auto it = om.find(d.chain_data);
+			if (it!=om.end()){
+				int cell_offset = offset + (it->second);
+				ds_pattern::transform(data, scan, cell_offset);
+			}
 
 		} else {
 			BOOST_LOG_TRIVIAL(error) << "Scan values not found: " << d.chain_data;
@@ -273,6 +271,11 @@ void ds_pattern::sequential_extractor::operator()(const ds_pattern::scan& v) {
 	c->push_back(cycle);
 }
 
+void ds_pattern::sequential_extractor::operator()(const ds_pattern::vector& v){
+	PatternValue ports = transform(v.port_data, v.port_data.size(), 0);
+	ds_pattern::ate_cycle cycle(ports, v.timeplate);
+	c->push_back(cycle);
+}
 
 ds_pattern::PatternValue ds_pattern::transform(const std::string& s, const std::size_t& length, const int& offset) {
 	ds_pattern::PatternValue val(length);
@@ -319,15 +322,17 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 		if (v.get_size() > 0)
 			num_scan++;
 	}
-	std::size_t cell_offset = (pl.get_num_inputs() + pl.get_num_outputs()) * 2;
+	std::size_t vector_offset = pl.get_num_inputs() + pl.get_num_outputs();
+	std::size_t cell_offset = vector_offset * 2;
 
 	std::size_t scan_cycles = 0;
 	std::size_t idx = 0;
 
 	while(scan_cycles < num_scan){
 
-		ds_pattern::PatternValue pv = pl.get_scan_values(idx++);
-		if (pv.get_size() > 0){
+		ds_pattern::PatternValue p_scan = pl.get_port_values(idx);
+		ds_pattern::PatternValue scan = pl.get_scan_values(idx++);
+		if (scan.get_size() > 0){
 
 			scan_cycles++;
 
@@ -337,47 +342,44 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 				last =  num_scan % ds_common::WIDTH;
 
 			SimPatternBlock b(last);
-			std::size_t total_values = cell_offset + pl.get_num_scan_cells() * 2;
+			std::size_t total_values = cell_offset + pl.get_num_scan_cells()*2;
 			for (std::size_t j=0;j<total_values;j++){
 				b.values.push_back(ds_lg::lg_v64(0x0L,-1L));
 			}
-			set_values(0, cell_offset, pv, b);
-			ds_pattern::PatternValue launch = pl.get_scan_values(idx++);
-			ds_pattern::PatternValue capture = pl.get_scan_values(idx++);
+			set_values(0, cell_offset, scan, b);
+			ds_pattern::PatternValue launch = pl.get_port_values(idx++);
 			set_values(0, 0, launch, b);
-			set_values(0, cell_offset / 2, capture, b);
+			ds_pattern::PatternValue capture = pl.get_port_values(idx++);
+			set_values(0, vector_offset, capture, b);
 
 			std::size_t block_start = scan_cycles;
 			std::size_t curr = scan_cycles + 1;
 
 			while(curr - block_start < last ){
 
+				ds_pattern::PatternValue p = pl.get_port_values(idx);
 				ds_pattern::PatternValue v = pl.get_scan_values(idx++);
 
 				if (v.get_size() > 0){
 
 					scan_cycles++;
 
-					set_values(curr - block_start, cell_offset, pv, b);
+					std::size_t pos = curr - block_start;
+					set_values(pos, cell_offset, v, b);
 					if ((last != ds_common::WIDTH) && ((scan_cycles - block_start)==last-1))
 						break;
-					BOOST_LOG_TRIVIAL(trace) << " 15 " << "last:" << last << " " << (scan_cycles - block_start);
-					ds_pattern::PatternValue launch = pl.get_scan_values(idx++);
-					BOOST_LOG_TRIVIAL(trace) << "16";
-					ds_pattern::PatternValue capture = pl.get_scan_values(idx++);
-					BOOST_LOG_TRIVIAL(trace) << "17";
-					set_values(curr - block_start, 0, launch, b);
-					BOOST_LOG_TRIVIAL(trace) << "18";
-					set_values(curr - block_start, cell_offset / 2, capture, b);
-					BOOST_LOG_TRIVIAL(trace) << "19 " << idx << " " << pl.get_vector_count() << " all " << num_scan << " sc " <<scan_cycles;
+
+					ds_pattern::PatternValue launch = pl.get_port_values(idx++);
+					set_values(pos, 0, launch, b);
+					ds_pattern::PatternValue capture = pl.get_port_values(idx++);
+					set_values(pos, vector_offset, capture, b);
+
 					curr++;
 				}
 			}
 			values.push_back(b);
 		}
 	}
-
-	BOOST_LOG_TRIVIAL(trace) << "A";
 
 	std::size_t num_blocks = values.size();
 	int output_offset = cell_offset + pl.get_num_scan_cells();
@@ -386,8 +388,8 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 			long av = values[i+1].values[output_offset+j].v & 0x1L;
 			long ax = values[i+1].values[output_offset+j].x & 0x1L;
 
-			long vfixed = (values[i].values[output_offset+j].v << 1) | av;
-			long xfixed = (values[i].values[output_offset+j].x << 1) | ax;
+			long vfixed = (values[i].values[output_offset+j].v >> 1) | (av << (ds_common::WIDTH - 1));
+			long xfixed = (values[i].values[output_offset+j].x >> 1) | (ax << (ds_common::WIDTH - 1));
 
 			values[i].values[output_offset+j].v = vfixed;
 			values[i].values[output_offset+j].x = xfixed;
@@ -401,22 +403,31 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 	}
 }
 
-void ds_pattern::SequentialPatternProvider::set_values(const std::size_t& slot, const std::size_t& offset, const ds_pattern::PatternValue pv, ds_pattern::SimPatternBlock& block){
+void ds_pattern::SequentialPatternProvider::set_values(const std::size_t& slot, const std::size_t& block_offset,
+		const ds_pattern::PatternValue pv, ds_pattern::SimPatternBlock& block){
+	set_values(slot, block_offset, pv, 0, pv.get_size(), block);
+}
 
-	for (std::size_t k=0;k<pv.get_size();k++){
+void ds_pattern::SequentialPatternProvider::set_values(const std::size_t& slot, const std::size_t& block_offset,
+		const ds_pattern::PatternValue pv, const std::size_t& pattern_offset, const std::size_t& length, ds_pattern::SimPatternBlock& block){
+
+	for (std::size_t k=0;k<length;k++){
 
 		int64 v = 0L;
 		int64 x = 0L;
-		if (pv.get(k) == ds_common::BIT_0){
+		std::size_t offset = pattern_offset + k;
+		if (pv.get(offset) == ds_common::BIT_0){
 			v = 0L;
 			x = 1L << slot;
-		} else if (pv.get(k) == ds_common::BIT_1){
+		} else if (pv.get(offset) == ds_common::BIT_1){
 			v = 1L << slot;
 			x = 1L << slot;
 		}
 
-		block.values[offset + k].v |= v;
-		block.values[offset + k].x &= ~x;
+		std::size_t disp = block_offset + k;
+		block.values[disp].v |= v;
+		int64 x_mask = ~x;
+		block.values[disp].x &= x_mask;
 	}
 }
 
@@ -453,7 +464,9 @@ int ds_pattern::SequentialPatternProvider::get_port_offset(const std::string& na
 
 int ds_pattern::SequentialPatternProvider::get_scan_offset(const std::string& name) const {
 	int offset = -1;
+	std::string s = "";
 	for (std::size_t i=0;i<cells.size();i++){
+		s += cells[i] + " ";
 		if (cells[i]==name){
 			offset = i;
 			break;
@@ -461,9 +474,7 @@ int ds_pattern::SequentialPatternProvider::get_scan_offset(const std::string& na
 	}
 	if (offset == -1){
 		BOOST_LOG_TRIVIAL(error) << "Scan cell not found: " << name;
-		return offset;
 	}
-	offset += num_inputs + num_outputs;
 	return offset;
 }
 

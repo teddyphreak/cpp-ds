@@ -504,7 +504,14 @@ namespace ds_structural {
 		/*!
 		 * adds signal to the netlist
 		 */
-		void add_signal(Signal * const s){signals[s->get_instance_name()]= s;}
+		bool add_signal(Signal * const s){
+			auto it = signals.find(s->get_instance_name());
+			if (it == signals.end()){
+				signals[s->get_instance_name()]= s;
+				return true;
+			}
+			return false;
+		}
 		/*!
 		 * removes a signal from the netlist
 		 */
