@@ -1177,8 +1177,8 @@ namespace ds_lg {
 		 */
 		ds_common::int64 propagate_to_check_point(SimulationHook<N> *h){
 			N *n = h->get_hook_node(this);
-			n->add_hook(h);
 			N* node = get_check_point(n);
+			n->add_hook(h);
 			V ff = node->get_mark();
 			std::vector<N*> path;
 			path.push_back(n);
@@ -1192,15 +1192,29 @@ namespace ds_lg {
 						break;
 				}
 			V faulty = n->peek();
+
+
 			for (N *p:path){
 				p->rollback();
 			}
 			if (n!=node){
+				//std::cout << "stopping at: " << n->get_name() << " " << node->get_name() << std::endl;
 				return 0;
 			}
 
 			ds_common::int64 result = resolve(ff, faulty);
 			return result;
+		}
+
+		ds_common::int64 activate(SimulationHook<N> *h){
+			ds_common::int64 activation = 0;
+			N *n = h->get_hook_node(this);
+			V* p_port = n->get_output(h->get_hook_port());
+			if (p_port!=0){
+				activation = h->hook(this);
+			}
+			n->remove_hook(h);
+			return activation;
 		}
 
 		virtual void sim(ds_pattern::SimPatternBlock *pb){
@@ -1221,12 +1235,16 @@ namespace ds_lg {
 
 		virtual void sim_intermediate(){
 			std::set<N*> set;
+			std::vector<N*> regs;
 			for (int i=0;i<num_levels;i++){
 				lg_node_container* level = simulation[i];
 				iteration++;
 				for (auto it=level->begin();it!=level->end();it++){
 					N *n = *it;
 					bool p = n->propagate(true);
+					if (n->has_state()){
+						regs.push_back(n);
+					}
 					if (p){
 						for (N *o : n->outputs){
 							auto s = set.find(o);
@@ -1238,6 +1256,12 @@ namespace ds_lg {
 					}
 				}
 			}
+
+			for (auto it=regs.begin();it!=regs.end();it++){
+				N *n = *it;
+				n->propagate(true);
+			}
+
 			for (int i=0;i<num_levels;i++){
 				lg_node_container* level = simulation[i];
 				for (auto it=level->begin();it!=level->end();it++){
@@ -1712,12 +1736,13 @@ namespace ds_lg {
 		 */
 		virtual driver_v64** get_input(const std::string& name);
 	};
+
 	class TState : public TNode {
 	public:
 		driver_v64 * d;		//!< data input
 		driver_v64 * cd;	//!< clk input
 		driver_v64 o_n;		//!< not Q output
-		driver_v64 o_int;		//!< intermediate value
+		driver_v64 o_int;	//!< intermediate value
 		lg_v64 previous_n;
 		driver_v64 * rst;
 		driver_v64 * rst_n;
@@ -1741,21 +1766,24 @@ namespace ds_lg {
 			output_array[0] = &previous;
 			output_array[1] = &previous_n;
 			endpoint = true;
-			p = d;
+			p = &o_int;
 		}
 
-		virtual driver_v64 peek() const {return *d;}
+		virtual driver_v64 peek() const {return o_int;}
 
 		/*!
 		 * update outputs when clk event is active
 		 */
-		virtual void sim() {}
+		virtual void sim() {
+			o_int.value = d->value;
+		}
 
 		virtual void tick(){
 			mark_clock_cycle();
 			o.value = d->value;
 			o_n.value = ~o.value;
 			bo = o.value;
+			std::cout<< get_name() << std::hex << "previous: " << previous.v << " current: " << o.value.v << std::endl;
 		}
 		/*!
 		 * Simulation primitive state gates. Faults are injected
@@ -1764,8 +1792,17 @@ namespace ds_lg {
 		/*!
 		 * revert output to previous value
 		 */
-		virtual void rollback(){o = bo; o_n = ~bo;}
-		virtual void flip(){o.value = ~o.value; o_n.value = o.value;};
+		virtual void rollback(){
+			o.value = bo;
+			o_n.value = ~o.value;
+			o_int.value = o.value;
+		}
+		virtual void flip(){
+			o.value = ~o.value;
+			o_n.value = ~o_n.value;
+			//o_int.value = o.value;
+		};
+
 		/*!
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return
@@ -1812,6 +1849,7 @@ namespace ds_lg {
 		virtual TNode* get_driver_node() const {
 			return d->driver;
 		}
+		virtual void hook_outputs();
 		/*!
 		 * Virtual destructor
 		 */
@@ -1870,6 +1908,19 @@ namespace ds_lg {
 				}
 			}
 
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				TNode *n = *it;
+				if (n->has_state()){
+					n->propagate(false);
+				}
+			}
+
+			TNode *n1 = get_node("U32432");
+			TNode *ff = get_node("FF_15_17");
+
+			std::cout << std::hex << "COMPARE " << n1->peek().value.v << "   " << ff->peek().value.v << std::endl;
+
+
 			clocks[0].tick();
 
 			next_vector();
@@ -1881,6 +1932,17 @@ namespace ds_lg {
 					n->mark();
 				}
 			}
+
+			std::cout << std::hex << "COMPARE " << n1->peek().value.v << "   " << ff->peek().value.v << std::endl;
+
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				TNode *n = *it;
+				if (n->has_state()){
+					n->propagate(false);
+				}
+			}
+
+
 		}
 	};
 }

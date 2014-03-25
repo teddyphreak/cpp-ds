@@ -173,7 +173,8 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 
 	//the check points are inputs, outputs or fanount nodes. The values of the map are the faults dominated by
 	//the corresponding check point
-	std::map<TNode*, std::set<ds_faults::TransitionFault*>* > check_points;
+	std::map<TNode*, std::set<ds_faults::TransitionFault*>* > in_check_points;
+	std::map<TNode*, std::set<ds_faults::TransitionFault*>* > out_check_points;
 	std::map<ds_faults::TransitionFault*, SAFaultDescriptor*> fault_map;
 	int total = 0;
 
@@ -187,23 +188,43 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 
 		TNode *cp = lg->get_check_point(node);
 
-		auto it = check_points.find(cp);
-		std::set<ds_faults::TransitionFault*>* faults = 0;
-		if (it==check_points.end()){
-			faults = new std::set<ds_faults::TransitionFault*>();	// no checkpoint for this fault yet
-			check_points[cp] = faults;
-		} else {
-			faults = check_points[cp];						// insert into the available check point entry
-		}
 		ds_faults::TransitionFault *sa = new ds_faults::TransitionFault(lg->get_netlist(), d->gate_name, d->port_name, d->value);
-		fault_map[sa]=d;
-		faults->insert(sa);
-		total++;
+
+		if ( ( d->gate_name != cp->get_name() || sa->is_input() )  && cp->has_state() ){
+			std::cout << d->gate_name << " " << d->port_name << std::endl;
+			std::set<ds_faults::TransitionFault*>* faults = 0;
+			auto it = in_check_points.find(cp);
+			if (it==in_check_points.end()){
+				faults = new std::set<ds_faults::TransitionFault*>();	// no checkpoint for this fault yet
+				in_check_points[cp] = faults;
+			} else {
+				faults = in_check_points[cp];						// insert into the available check point entry
+			}
+			fault_map[sa]=d;
+			faults->insert(sa);
+			total++;
+		} else {
+			std::set<ds_faults::TransitionFault*>* faults = 0;
+			auto it = out_check_points.find(cp);
+			if (it==out_check_points.end()){
+				faults = new std::set<ds_faults::TransitionFault*>();	// no checkpoint for this fault yet
+				out_check_points[cp] = faults;
+			} else {
+				faults = out_check_points[cp];						// insert into the available check point entry
+			}
+			fault_map[sa]=d;
+			faults->insert(sa);
+			total++;
+
+		}
 	}
 
 	// order check points: for now irrelevant
 	std::vector<TNode*> ordered_check_points;
-	for (auto it=check_points.begin();it!=check_points.end();it++){
+	for (auto it=in_check_points.begin();it!=in_check_points.end();it++){
+		ordered_check_points.push_back(it->first);
+	}
+	for (auto it=out_check_points.begin();it!=out_check_points.end();it++){
 		ordered_check_points.push_back(it->first);
 	}
 	std::sort(ordered_check_points.begin(), ordered_check_points.end(), [] (const TNode* n1, const TNode* n2) { return (n1->level > n2->level); });
@@ -273,55 +294,88 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 			possibly_detected=0;
 
 			//get all dominated faults
-			std::set<ds_faults::TransitionFault*>* cp_faults = check_points[cp];
+			std::set<ds_faults::TransitionFault*>* in_faults = in_check_points[cp];
+			std::set<ds_faults::TransitionFault*>* out_faults = out_check_points[cp];
 
 			//check if all faults in this check point have been detected
-			if (cp_faults->size()==0)
-				continue;
+			if (out_faults != 0){
+				if (out_faults->size()!=0){
 
-			//flip the fault-free value and apply any monitors (required for fanout nodes)
-			cp->flip_and_observe();
-			//queue all check point outputs for intermediate simulation
-			for (TNode* o:cp->outputs){
-				lg->push_node(o);
+					//flip the fault-free value and apply any monitors (required for fanout nodes)
+					cp->flip_and_observe();
+					//queue all check point outputs for intermediate simulation
+					for (TNode* o:cp->outputs){
+						lg->push_node(o);
+					}
+
+					//intermediate simulation
+					lg->sim_intermediate();
+
+					//reset check point to fault-free state
+					cp->rollback();
+
+					ds_common::int64 a = detected & mask;
+					ds_common::int64 b = possibly_detected & mask;
+
+					if (a !=0 || b!=0){
+
+						for (auto f_it=out_faults->begin();f_it!=out_faults->end();){
+
+							ds_faults::TransitionFault *f = *f_it;
+							ds_faults::SAFaultDescriptor* d = fault_map[f];
+
+							bool show = false;
+							if (d->get_string()=="U32432/Z:1"){
+								show = true;
+							}
+
+							//propagate fault to check point
+							ds_common::int64 obs = 0;
+							TNode *n = f->get_hook_node(lg);
+							if (n == cp && n->has_state() && f->is_output()){
+								obs = lg->activate(f);
+								std::cout << std::hex << obs << " " << a << std::endl;
+							} else {
+								obs = lg->propagate_to_check_point(f);
+							}
+
+							std::cout << std::hex << obs << " " << a << std::endl;
+							//check if the fault is propagated AND an error is detected
+							if ((obs & a) !=0){
+								out_faults->erase(f_it++);
+								fl->set_fault_category(d, ds_faults::DS);
+								//						if (show)
+								//							std::cout << "detected " << std::endl;
+							} else if((obs & b) !=0){
+								fl->set_fault_category(d, ds_faults::NP);
+								++f_it;
+							}else {
+								++f_it;
+							}
+
+							std::cout << "OUT end" << std::endl;
+						}
+					}
+				}
 			}
 
-			//intermediate simulation
-			lg->sim_intermediate();
 
-			//reset check point to fault-free state
-			cp->rollback();
+			if (in_faults!=0){
+				if (in_faults->size()!=0){
 
-			ds_common::int64 a = detected & mask;
-			ds_common::int64 b = possibly_detected & mask;
+					for (auto f_it=in_faults->begin();f_it!=in_faults->end();){
 
-			if (a !=0 || b!=0){
+						ds_faults::TransitionFault *f = *f_it;
+						ds_faults::SAFaultDescriptor* d = fault_map[f];
 
-				if (a!=0){
-					if (total_cp.find(cp) == total_cp.end())
-						total_cp.insert(cp);
-				}
+						ds_common::int64 obs = lg->propagate_to_check_point(f);
 
-				for (auto f_it=cp_faults->begin();f_it!=cp_faults->end();){
-
-					ds_faults::TransitionFault *f = *f_it;
-
-					bool show = false;
-
-					ds_faults::SAFaultDescriptor* d = fault_map[f];
-
-					//propagate fault to check point
-					ds_common::int64 obs = lg->propagate_to_check_point(f);
-
-					//check if the fault is propagated AND an error is detected
-					if ((obs & a) !=0){
-						cp_faults->erase(f_it++);
-						fl->set_fault_category(d, ds_faults::DS);
-					} else if((obs & b) !=0){
-						fl->set_fault_category(d, ds_faults::NP);
-						++f_it;
-					}else {
-						++f_it;
+						if (obs !=0){
+							in_faults->erase(f_it++);
+							fl->set_fault_category(d, ds_faults::DS);
+						} else {
+							++f_it;
+						}
 					}
 				}
 			}
@@ -329,24 +383,24 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	}
 	std::cout << "CP: " << total_cp.size() << " / " << ordered_check_points.size() << " Detected:" << total_detected << std::endl;
 
-	// delete allocated objects
-	for (auto it=output_map.begin();it!=output_map.end();it++){
-
-		TNode *output = it->first;
-		ds_simulation::TErrorObserver* observer = it->second;
-		output->remove_monitor(observer);
-		delete observer;
-	}
-
-	for (auto it=check_points.begin();it!=check_points.end();it++){
-		std::set<ds_faults::TransitionFault*>* faults = it->second;
-		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
-			ds_faults::TransitionFault* f = *f_it;
-			delete(f);
-		}
-		delete faults;
-	}
-	check_points.clear();
+//	// delete allocated objects
+//	for (auto it=output_map.begin();it!=output_map.end();it++){
+//
+//		TNode *output = it->first;
+//		ds_simulation::TErrorObserver* observer = it->second;
+//		output->remove_monitor(observer);
+//		delete observer;
+//	}
+//
+//	for (auto it=in_check_points.begin();it!=in_check_points.end();it++){
+//		std::set<ds_faults::TransitionFault*>* faults = it->second;
+//		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
+//			ds_faults::TransitionFault* f = *f_it;
+//			delete(f);
+//		}
+//		delete faults;
+//	}
+//	ordered_check_points.clear();
 }
 
 void ds_simulation::TErrorObserver::observe(const ds_lg::driver_v64& v) {

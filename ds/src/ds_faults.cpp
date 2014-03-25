@@ -353,7 +353,7 @@ ds_lg::int64 ds_faults::TransitionFault::compare(const ds_lg::driver_v64* a, con
 	ds_lg::lg_v64 t = b.value;
 	const ds_lg::TNode *driver = a->driver;
 	const ds_lg::lg_v64 *p = driver->get_previous_value(a->port_id);
-	ds_lg::int64 cond = ((~p->v & v.v & t.v) | (p->v & ~v.v & ~t.v)) & ~v.x & ~t.x & ~p->x;
-	//std::cout << std::hex << "v:" << v.v << " t:" << t.v << " p:" << p->v << " cond" << cond << std::endl;
+	ds_lg::int64 cond = ((~p->v & v.v & t.v) | (p->v & ~v.v & ~t.v)); //& ~v.x & ~t.x & ~p->x;
+	std::cout << std::hex << "v:" << v.v << " t:" << t.v << " p:" << p->v << " cond" << cond << std::endl;
 	return cond;
 }

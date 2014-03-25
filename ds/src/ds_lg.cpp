@@ -491,6 +491,22 @@ namespace ds_lg {
 		load_n = sload_n;
 	}
 
+	void TState::hook_outputs(){
+		for (ds_lg::SimulationHook<TNode> *h : hooks){
+			driver_v64* p_port = get_output(h->get_hook_port());
+			if (p_port!=0){
+				int64 activation = h->hook(resolver);
+				p_port->value.v ^= activation;// & ~p_port->value.x;
+			}
+			if (p_port == &o){
+			//	std::cout << std::hex << o.value.v << " " << o_int.value.v << std::endl;;
+				o_int.value = o.value;
+			} else if (p_port == &o_n){
+
+			}
+		}
+	}
+
 	void TNode::hook_inputs(){
 		for (ds_lg::SimulationHook<TNode> *h : hooks){
 			std::string hport = h->get_hook_port();

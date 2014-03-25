@@ -49,7 +49,7 @@ void sim_test::test_fc(){
 
 void sim_test::test_tdf(){
 	BOOST_LOG_TRIVIAL(info) << "TDF Test...";
-	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_target_faults");
+	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_faults");
 //	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
 //	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
 //	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
@@ -168,14 +168,17 @@ void sim_test::lg_loc_test(const std::string& design, const std::string& wgl_fil
 		for (std::size_t i=0;i<provider->get_num_outputs();i++){
 			int pos = output_offset + i;
 			std::string name = provider->get_name(pos);
+			std::cout << "output name " << name << "calculated: " << std::hex << block->values[pos].v << " predicted " << spec.values[pos].v << std::endl;
 			BOOST_ASSERT((block->values[pos].v & ~spec.values[pos].x) == (spec.values[pos].v & ~spec.values[pos].x));
 		}
 		for (std::size_t i=0;i<provider->get_num_scan_cells();i++){
 			int pos = scan_offset + i;
-			BOOST_ASSERT((block->values[pos].v & ~spec.values[pos].x) == (spec.values[pos].v & ~spec.values[pos].x));
+			std::string name = provider->get_name(pos);
+			ds_lg::TNode *reg = lg->get_node(name);
+			ds_lg::lg_v64 val = reg->peek().value;
+			std::cout << "FF name " << name << "calculated: " << std::hex << val.v << " predicted " << spec.values[provider->get_num_scan_cells() + pos].v << std::endl;
+			BOOST_ASSERT((val.v & ~spec.values[provider->get_num_scan_cells() + pos].x) == (spec.values[provider->get_num_scan_cells() + pos].v & ~spec.values[provider->get_num_scan_cells() + pos].x));
 		}
-
-		break;
 	}
 }
 
@@ -217,8 +220,9 @@ void sim_test::fc_tdf_test(const std::string& design, const std::string& wgl_fil
 
 	int fast_scan_detected = 0;
 	for (ds_faults::fastscan_descriptor f:descriptors){
-		if ((f.code == "DS") || (f.code == "DI"))
+		if ((f.code == "DS") || (f.code == "DI")){
 			fast_scan_detected++;
+		}
 	}
 
 	BOOST_LOG_TRIVIAL(info) << "Detected faults: " << detected.size() << " FS: " << fast_scan_detected;
@@ -236,7 +240,6 @@ void sim_test::fc_tdf_test(const std::string& design, const std::string& wgl_fil
 		});
 
 		ds_faults::FaultCategory cat = fl.get_fault_category(d->get_string());
-
 		if (descriptor->code == "DS" || descriptor->code == "DI"){
 			std::cout << "ERROR " << d->get_string() << ":" << descriptor->code << ":" << cat << std::endl;
 		}
