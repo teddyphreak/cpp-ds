@@ -152,6 +152,9 @@ namespace ds_lg {
 	 * @return
 	 */
 	virtual T* get_hook_node(ds_lg::Resolver<T> *res) const=0;
+
+	virtual bool is_input() const =0;
+	virtual bool is_output() const =0;
 	};
 
 	template <class T, class V>
@@ -264,6 +267,10 @@ namespace ds_lg {
 		 * @return a copy of the value of the node's output
 		 */
 		virtual T peek() const {return o;}
+
+		virtual T peek_sink() const {return o;}
+
+		virtual void update() {}
 		/*!
 		 * sets an internal pointer to the encompasing leveled graph
 		 * @param graph
@@ -322,7 +329,7 @@ namespace ds_lg {
 	/*!
 	 * save the output value of the base simulation
 	 */
-	void mark() {bo = o;}
+	virtual void mark() {bo = o;}
 	/*!
 	 * queries the output value of the base simulation
 	 * @return
@@ -331,7 +338,7 @@ namespace ds_lg {
 	/*!
 	 * set output value to the complement of the simulation value
 	 */
-	virtual void flip(){o = ~bo;};
+	virtual void flip(){o = ~o;};
 	/*!
 	 * set output value to the complement of the simulation value and apply any attached observer
 	 */
@@ -1025,6 +1032,7 @@ namespace ds_lg {
 		virtual void add_register(R* r){
 			registers.push_back(r);
 			registry[r->get_name()] = r;
+			reg_registry[r->get_name()] = r;
 			r->set_resolver(this);
 		}
 		virtual void add_node(N* n){
@@ -1177,9 +1185,16 @@ namespace ds_lg {
 		 */
 		ds_common::int64 propagate_to_check_point(SimulationHook<N> *h){
 			N *n = h->get_hook_node(this);
-			N* node = get_check_point(n);
 			n->add_hook(h);
+
+			N* node = get_check_point(n);
 			V ff = node->get_mark();
+			bool sink = (node->has_state() && h->is_input()) || (node->has_state() && n != node && h->is_output());
+			if (sink){
+				node->propagate(true);
+				ff = node->peek_sink();
+			}
+
 			std::vector<N*> path;
 			path.push_back(n);
 			bool p = n->propagate(true);
@@ -1193,28 +1208,19 @@ namespace ds_lg {
 				}
 			V faulty = n->peek();
 
+			if (sink){
+				faulty = n->peek_sink();
+			}
 
 			for (N *p:path){
 				p->rollback();
 			}
 			if (n!=node){
-				//std::cout << "stopping at: " << n->get_name() << " " << node->get_name() << std::endl;
 				return 0;
 			}
 
 			ds_common::int64 result = resolve(ff, faulty);
 			return result;
-		}
-
-		ds_common::int64 activate(SimulationHook<N> *h){
-			ds_common::int64 activation = 0;
-			N *n = h->get_hook_node(this);
-			V* p_port = n->get_output(h->get_hook_port());
-			if (p_port!=0){
-				activation = h->hook(this);
-			}
-			n->remove_hook(h);
-			return activation;
 		}
 
 		virtual void sim(ds_pattern::SimPatternBlock *pb){
@@ -1235,20 +1241,19 @@ namespace ds_lg {
 
 		virtual void sim_intermediate(){
 			std::set<N*> set;
-			std::vector<N*> regs;
+			std::set<N*> regs;
 			for (int i=0;i<num_levels;i++){
 				lg_node_container* level = simulation[i];
 				iteration++;
 				for (auto it=level->begin();it!=level->end();it++){
 					N *n = *it;
 					bool p = n->propagate(true);
-					if (n->has_state()){
-						regs.push_back(n);
-					}
 					if (p){
 						for (N *o : n->outputs){
 							auto s = set.find(o);
 							if (s==set.end()){
+								if (o->has_state())
+									regs.insert(o);
 								push_node(o);
 								set.insert(o);
 							}
@@ -1272,6 +1277,11 @@ namespace ds_lg {
 			}
 		}
 
+		virtual R* get_register(const std::string& name){
+			return reg_registry[name];
+		}
+
+		virtual void initialize(){}
 
 	protected:
 		int num_levels;										//!< number of levels in the graph
@@ -1284,6 +1294,7 @@ namespace ds_lg {
 		V constant_X;
 		ds_structural::NetList *nl;							//!< parent netlist
 		std::unordered_map<std::string, N*> registry;			//!< node map indexed by node instance name
+		std::unordered_map<std::string, R*> reg_registry;			//!< node map indexed by node instance name
 		double iteration;
 		virtual ds_common::int64 resolve(const V& ff, const V& faulty) const = 0;
 	};
@@ -1739,10 +1750,9 @@ namespace ds_lg {
 
 	class TState : public TNode {
 	public:
-		driver_v64 * d;		//!< data input
+		TOutput d;
 		driver_v64 * cd;	//!< clk input
 		driver_v64 o_n;		//!< not Q output
-		driver_v64 o_int;	//!< intermediate value
 		lg_v64 previous_n;
 		driver_v64 * rst;
 		driver_v64 * rst_n;
@@ -1758,7 +1768,7 @@ namespace ds_lg {
 
 
 	public:
-		TState(const std::string& t):TNode(t), o_n(0,-1L,this,1), o_int(0,-1L,this,1), one(-1L,0,this,-1), zero(0,0,this,-1){
+		TState(const std::string& t):TNode(t), o_n(0,-1L,this,1), one(-1L,0,this,-1), zero(0,0,this,-1){
 			rst = &zero;
 			rst_n = &one;
 			load = &zero;
@@ -1766,24 +1776,20 @@ namespace ds_lg {
 			output_array[0] = &previous;
 			output_array[1] = &previous_n;
 			endpoint = true;
-			p = &o_int;
+			p = &d.o;
 		}
-
-		virtual driver_v64 peek() const {return o_int;}
 
 		/*!
 		 * update outputs when clk event is active
 		 */
 		virtual void sim() {
-			o_int.value = d->value;
+			d.sim();
+			d.observe();
 		}
 
 		virtual void tick(){
-			mark_clock_cycle();
-			o.value = d->value;
+			o = d.peek();
 			o_n.value = ~o.value;
-			bo = o.value;
-			std::cout<< get_name() << std::hex << "previous: " << previous.v << " current: " << o.value.v << std::endl;
 		}
 		/*!
 		 * Simulation primitive state gates. Faults are injected
@@ -1794,15 +1800,16 @@ namespace ds_lg {
 		 */
 		virtual void rollback(){
 			o.value = bo;
-			o_n.value = ~o.value;
-			o_int.value = o.value;
+			d.rollback();
 		}
 		virtual void flip(){
-			o.value = ~o.value;
+			o.value = ~bo;
 			o_n.value = ~o_n.value;
-			//o_int.value = o.value;
 		};
-
+		virtual void flip_internal(){
+			d.flip();
+		};
+		void mark() {bo = d.peek().value;}
 		/*!
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return
@@ -1846,14 +1853,23 @@ namespace ds_lg {
 		virtual const lg_v64* get_previous_value(const short id) const {
 			return output_array[id];
 		}
-		virtual TNode* get_driver_node() const {
-			return d->driver;
-		}
 		virtual void hook_outputs();
 		/*!
 		 * Virtual destructor
 		 */
 		virtual ~TState(){};
+
+		virtual driver_v64 peek_sink()const{
+			return d.peek();
+		}
+
+		virtual void update() {
+			tick();
+		}
+
+		TNode* get_sink(){
+			return &d;
+		}
 	};
 
 	class TLeveledGraph : public GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>{
@@ -1867,8 +1883,17 @@ namespace ds_lg {
 			constant_X = lg_v64(0L,-1L);
 		}
 
-	protected:
+		virtual void initialize(){
+			for (auto it=nodes.begin();it!=nodes.end();it++){
+				TNode *n = *it;
+				if (!n->has_state()){
+					combinational.push_back(n);
+				}
+			}
+		}
 
+	protected:
+		std::vector<TNode*> combinational;
 		std::size_t vector_offset;
 		ds_common::int64 resolve(const driver_v64& ff, const driver_v64& faulty) const {
 			ds_common::int64 diff = (ff.value.v ^ faulty.value.v);
@@ -1900,48 +1925,33 @@ namespace ds_lg {
 			scan();
 
 			//propagates events from inputs to outputs --> LAUNCH
-			for (auto it=nodes.begin();it!=nodes.end();it++){
+			for (auto it=combinational.begin();it!=combinational.end();it++){
 				TNode *n = *it;
 				n->propagate(false);
-				if (!n->has_state()){
-					n->mark_clock_cycle();
-				}
+				n->mark_clock_cycle();
 			}
 
-			for (auto it=nodes.begin();it!=nodes.end();it++){
+			for (auto it=registers.begin();it!=registers.end();it++){
 				TNode *n = *it;
-				if (n->has_state()){
-					n->propagate(false);
-				}
+				n->propagate(false);
+				n->mark_clock_cycle();
 			}
-
-			TNode *n1 = get_node("U32432");
-			TNode *ff = get_node("FF_15_17");
-
-			std::cout << std::hex << "COMPARE " << n1->peek().value.v << "   " << ff->peek().value.v << std::endl;
-
 
 			clocks[0].tick();
 
 			next_vector();
 			//propagates events from inputs to outputs --> CAPTURE
-			for (auto it=nodes.begin();it!=nodes.end();it++){
+			for (auto it=combinational.begin();it!=combinational.end();it++){
 				TNode *n = *it;
 				n->propagate(false);
-				if (!n->has_state()){
-					n->mark();
-				}
+				n->mark();
 			}
 
-			std::cout << std::hex << "COMPARE " << n1->peek().value.v << "   " << ff->peek().value.v << std::endl;
-
-			for (auto it=nodes.begin();it!=nodes.end();it++){
+			for (auto it=registers.begin();it!=registers.end();it++){
 				TNode *n = *it;
-				if (n->has_state()){
-					n->propagate(false);
-				}
+				n->propagate(false);
+				n->mark();
 			}
-
 
 		}
 	};

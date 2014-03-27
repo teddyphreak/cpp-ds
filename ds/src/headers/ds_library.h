@@ -100,10 +100,6 @@ namespace ds_library {
 	 * @return logic function implemented by gate type
 	 */
 	ds_library::LogicFunction get_function(const std::string& t){
-		std::cout << "SIZE: " << types.size() << std::endl;
-		for (auto it=types.begin();it!=types.end();it++){
-			std::cout << "TYPE " << it->first << " " << it->second << std::endl;
-		}
 		if (types.find(t)!= types.end())
 			return types[t];
 		else

@@ -398,7 +398,7 @@ namespace ds_lg {
 	}
 
 	driver_v64** TState::get_input(const std::string& name) {
-		if (name == "d")return &d;
+		if (name == "d")return d.get_input("a");
 		if (name == "cd")return &cd;
 		if (name == "rst")return &rst;
 		if (name == "rst_n")return &rst_n;
@@ -466,9 +466,9 @@ namespace ds_lg {
 	}
 
 	void TState::hook() {
-		driver_v64 *sd = d;
-		driver_v64 vd(*d);
-		d = &vd;
+		driver_v64 *sd = *d.get_input("a");
+		driver_v64 vd(**d.get_input("a"));
+		*d.get_input("a") = &vd;
 		driver_v64 *srst = rst;
 		driver_v64 vrst(*rst);
 		rst = &vrst;
@@ -484,7 +484,7 @@ namespace ds_lg {
 		hook_inputs();
 		sim();
 		hook_outputs();
-		d = sd;
+		*d.get_input("a") = sd;
 		rst = srst;
 		rst_n = srst_n;
 		load = sload;
@@ -497,12 +497,6 @@ namespace ds_lg {
 			if (p_port!=0){
 				int64 activation = h->hook(resolver);
 				p_port->value.v ^= activation;// & ~p_port->value.x;
-			}
-			if (p_port == &o){
-			//	std::cout << std::hex << o.value.v << " " << o_int.value.v << std::endl;;
-				o_int.value = o.value;
-			} else if (p_port == &o_n){
-
 			}
 		}
 	}

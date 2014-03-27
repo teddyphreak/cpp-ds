@@ -399,7 +399,12 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 		values.erase(--values.end());
 	} else {
 		values[num_blocks-1].num_patterns--;
-		values[num_blocks-1].mask <<= 1;
+		values[num_blocks-1].mask >>= 1;
+		for (std::size_t j=0;j<pl.get_num_scan_cells();j++){
+			values[num_blocks-1].values[output_offset+j].v >>= 1;
+			values[num_blocks-1].values[output_offset+j].x >>= 1;
+			values[num_blocks-1].values[output_offset+j].x |= (1L << (ds_common::WIDTH - 1));
+		}
 	}
 }
 

@@ -587,6 +587,8 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::GenericLeveledGraph<N,R,
 		builder->add_publisher(clk->get_instance_name(), state_elements.begin(), state_elements.end());
 	}
 
+	builder->initialize();
+
 }
 
 template <class V, class T>
