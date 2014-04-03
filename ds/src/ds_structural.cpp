@@ -715,11 +715,17 @@ void ds_structural::NetList::remove_floating_signals(){
 
 bool ds_structural::NetList::remove_unused_gates(){
 
-	auto it = gates.begin();
 	bool remove = false;
 	//check all gates
-	while (it!=gates.end()){
-		Gate *g = it->second;
+	std::set<const Gate*> to_remove;
+	for (auto g_it=gates.begin();g_it!=gates.end();){
+		Gate *g = g_it->second;
+
+		auto r_it = to_remove.find(g);
+		if (r_it!=to_remove.end()){
+			++g_it;
+			continue;
+		}
 
 		//check if gate is attached: if any of its output ports has more than one connection
 		bool isAttached = false;
@@ -728,61 +734,73 @@ bool ds_structural::NetList::remove_unused_gates(){
 			PortBit *pb = *it;
 			Signal *spb = pb->get_signal();
 
-			if (spb->count_ports() > 1){
-				isAttached = true;
-				break;
+			if (spb != 0){
+				if (spb->count_ports() > 1){
+					isAttached = true;
+					break;
+				}
 			}
 		}
 
 		if (!isAttached){
 
+	//		std::cout << "REMOVE " << std::endl;
+
 			//gate is NOT attached: schedule for removal
 			remove = true;
-			auto del = it++;
 			const ds_structural::port_container *inputs = g->get_inputs();
 
 			for (auto del=inputs->begin(); del!=inputs->end();del++ ){
 				PortBit *pb = *del;
 				Signal *spb = pb->get_signal();
+	//			std::cout << "signal " << spb->get_instance_name() << std::endl;
 				if (spb->count_ports() == 1){
 					// remove floating signal
 					remove_signal(spb);
 					delete(spb);
 				} else if (spb->count_ports() == 2){
 					// check if driver gate is also unused
-					std::vector<const Gate*> to_remove;
 					find_unused_gates(pb, &to_remove);
 					for(const Gate* r:to_remove){
-						remove_gate(r);
-						delete(r);
+						dettach_gate(r);
 					}
 
 				}
 			}
 
+	//		std::cout << "signals " << std::endl;
+
 			// remove floating signals in the output ports
 			for (auto del=outputs->begin(); del!=outputs->end();del++ ){
 				PortBit *pb = *del;
 				Signal *spb = pb->get_signal();
-				if (spb->count_ports() == 1){
-					remove_signal(spb);
-					delete(spb);
+				if (spb!=0){
+					if (spb->count_ports() == 1){
+						remove_signal(spb);
+						delete(spb);
+					}
 				}
 			}
 
+	//		std::cout << "erased " << std::endl;
+
 			//remove gate
-			gates.erase(del);
+			gates.erase(g_it++);
 			delete(g);
 
 		} else {
-			++it;
+			++g_it;
 		}
+	}
+	for (const Gate *g:to_remove){
+		remove_gate(g);
+		delete(g);
 	}
 	return remove;
 }
 
 
-void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<const Gate*> *unused){
+void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::set<const Gate*> *unused){
 
 	// initialize stack with provided netlist
 	std::stack<const PortBit*> todo;
@@ -793,26 +811,42 @@ void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<co
 		todo.pop();
 		Signal *s = current->get_signal();
 
+		//std::cout << "popping " << current->get_qualified_name() << std::endl;
+
+		if (s == 0)
+			continue;
+
 		//proceed only if port is connected to one other port
 		if (s->count_ports() == 2) {
 
+			//std::cout << "two ports " <<  std::endl;
+
 			// find driver port at the other end
 			PortBit*  driver = *(s->port_begin());
+
+			//std::cout << "dereferenced " <<  std::endl;
+
 			if (driver == current){
 				driver = *(++s->port_begin());
 			}
+
+			//std::cout << "updated " <<  std::endl;
 
 			// remove signal
 			remove_signal(s);
 			delete(s);
 
+		//	std::cout << "signal erased " <<  std::endl;
+
 			// potentially unused gate
 			Gate *driver_gate = driver->get_gate();
+
+		//	std::cout << "checking driver " <<  std::endl;
 
 			// watch out for unused ports in the netlist
 			if(driver_gate != this) {
 				//unused gate
-				unused->push_back(driver_gate);
+				unused->insert(driver_gate);
 				// trace the inputs of the drver gate to check if the are unused
 				for (auto del=driver_gate->get_inputs()->begin(); del!=driver_gate->get_inputs()->end();del++ ){
 					PortBit *in = *del;
@@ -820,9 +854,11 @@ void ds_structural::NetList::find_unused_gates(const PortBit *pb, std::vector<co
 				}
 			} else {
 				// unused port
+			//	std::cout << "disconnecting " <<  std::endl;
 				driver->disconnect();
 			}
 		}
+	//	std::cout << "out " <<  std::endl;
 	}
 }
 

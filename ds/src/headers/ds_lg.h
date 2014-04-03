@@ -87,7 +87,7 @@ namespace ds_lg {
 	inline lg_v64 f_mux2(val64_cpc a, val64_cpc b, val64_cpc c){ return (*b & *c) | (*a & ~(*c));}
 
 	/*!
-	 * interface to observe any node simulation event.
+	 * Interface to observe any node simulation event. Template type T defines the similation primitive to use
 	 */
 	template<class T>
 	class Monitor {
@@ -100,7 +100,7 @@ namespace ds_lg {
 	};
 
 	/*!
-	 * concrete class to capture the circuit's outputs in a pattern block
+	 * Concrete class to capture the circuit's outputs in a pattern block. It supports 3-valued logic.
 	 */
 	class OutputObserver : public Monitor<lg_v64> {
 	public:
@@ -123,6 +123,10 @@ namespace ds_lg {
 			(*pb)->values[offset].x = v.x;
 		}
 	};
+
+	/*!
+	 * Interface to map netlist information into primitive information for simulation
+	 */
 	template<class T>
 	class Resolver {
 	public:
@@ -130,7 +134,7 @@ namespace ds_lg {
 		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const=0;
 	};
 	/*!
-	 * primitive node for logic simulation. It holds references to its input and output nodes.
+	 * Primitive node for logic simulation. It holds references to its input and output nodes.
 	 * It holds the level assigned to the node and a reference to its equivalent gate in the netlist.
 	 * A node may be an 'endpoint' if simulation events are not propagated to its output nodes
 	 */
@@ -143,20 +147,32 @@ namespace ds_lg {
 		 */
 	virtual ds_lg::int64 hook(ds_lg::Resolver<T> *res) const=0;
 	/*!
-	 * returns the port name in the leveled graph node where the fault is inserted
+	 * Returns the port name in the leveled graph node where the fault is inserted
 	 * @return
 	 */
 	virtual std::string get_hook_port() const=0;
 	/*!
-	 * returns the graph node that owns this hook. This is the node whose behavior is affected by this hook
+	 * Returns the graph node that owns this hook. This is the node whose behavior is affected by this hook
 	 * @return
 	 */
 	virtual T* get_hook_node(ds_lg::Resolver<T> *res) const=0;
-
+	/*!
+	 * Returns true if this hook is attached to an input gate
+	 * @return
+	 */
 	virtual bool is_input() const =0;
+	/*!
+	 * Returns true if this hook is attached to an input gate
+	 * @return
+	 */
 	virtual bool is_output() const =0;
 	};
 
+	/*!
+	 * Generic primitive container for gate-level simulation. It describes the necessary components a gate
+	 * should have. Template type T defines the representation of a simulation value. Template type V defines the type
+	 * of this gate's input and output gates
+	 */
 	template <class T, class V>
 	class LGNode {
 	public:
@@ -164,19 +180,19 @@ namespace ds_lg {
 		ds_structural::Gate *gate;							//!< equivalent gate in netlist
 		std::vector<V*> outputs;							//!< output nodes
 		std::vector<V*> inputs;								//!< input nodes
-		std::list<SimulationHook<V>*> hooks;
+		std::list<SimulationHook<V>*> hooks;				//!< simulation hooks in this gate
 		/*!
-		 * initializes public members. By default the node is not an endpoint.
+		 * Initializes public members. By default the node is not an endpoint.
 		 * @param t node type
 		 */
 		LGNode(const std::string &t):level(-1),gate(0),endpoint(false),type(t),p(&o){}
 		/*!
-		 * sets the equivalent gate in the netlist
+		 * Sets the equivalent gate in the netlist
 		 * @param g equivalent gate in the netlist
 		 */
 		void set_gate(ds_structural::Gate* g) {gate = g;}
 		/*!
-		 * return the equivalent gate in the netlist
+		 * Return sthe equivalent gate in the netlist
 		 */
 		ds_structural::Gate* get_gate() const{return gate;}
 		/*!
@@ -190,7 +206,7 @@ namespace ds_lg {
 		 */
 		virtual void hook()=0;
 		/*!
-		 * apply all registered observers
+		 * Apply all registered observers
 		 */
 		void observe(){
 
@@ -200,13 +216,13 @@ namespace ds_lg {
 			}
 		}
 		/*!
-		 * gets the primitive value address of an input port. If the provided name cannot be found null is returned
+		 * Gets the primitive value address of an input port. If the provided name cannot be found null is returned
 		 * @param name name of the port value
 		 * @return address of the primitive value
 		 */
 		virtual T** get_input(const std::string& name)=0;
 		/*!
-		 * returns an output primitive value
+		 * Returns an output primitive value
 		 * @param name output port name
 		 * @return pointer to this node's output primitive value
 		 */
@@ -216,22 +232,22 @@ namespace ds_lg {
 		 */
 		virtual ~LGNode(){};
 		/*!
-		 * returns node type
+		 * Returns node type
 		 * @return any string may be returned
 		 */
 		std::string get_type() const {return type;}
 		/*!
-		 * true if the node's is a sequential element
+		 * Returns true if the node's is a sequential element
 		 * @return
 		 */
 		virtual bool has_state() {return false;}
 		/*!
-		 * true if node is a primary output
+		 * Returns true if node is a primary output
 		 * @return
 		 */
 		bool is_endpoint() const {return endpoint;}
 		/*!
-		 * registers a monitor that is called on each simulation event
+		 * Registers a monitor that is called on each simulation event
 		 * @param m monitor to observe this node
 		 */
 		void add_monitor(Monitor<T>* m){monitors.push_back(m);}
@@ -243,18 +259,18 @@ namespace ds_lg {
 			monitors.erase(m_it);
 		}
 		/*!
-		 * removes all monitors in this node
+		 * Removes all monitors in this node
 		 */
 		void remove_monitors(){
 			monitors.clear();
 		}
 		/*!
-		 * returns the current number of monitors this node has
+		 * Returns the current number of monitors this node has
 		 * @return
 		 */
 		unsigned int num_monitors() const {return monitors.size();}
 		/*!
-		 * gets the node name. It returns the instance name of the corresponding gate in the netlist.
+		 * Gets the node name. It returns the instance name of the corresponding gate in the netlist.
 		 * If this gate does not exist it returns the empty string
 		 * @return
 		 */
@@ -263,14 +279,17 @@ namespace ds_lg {
 			return name;
 		}
 		/*!
-		 * reports the primitive value of this node's output
+		 * Reports the primitive value of this node's output
 		 * @return a copy of the value of the node's output
 		 */
 		virtual T peek() const {return o;}
 
-		virtual T peek_sink() const {return o;}
+		/*!
+		 * Returns the internal simulation primitive used to model the evaluation phase of a sequential node
+		 * @return
+		 */
+		virtual V* get_sink() {return 0;}
 
-		virtual void update() {}
 		/*!
 		 * sets an internal pointer to the encompasing leveled graph
 		 * @param graph
@@ -300,11 +319,11 @@ namespace ds_lg {
 	public:
 		typedef typename std::vector<Monitor<T>*> monitor_container;
 		T o; 						//!< node output
-		bool endpoint;					//!< true if this node is an endpoint
-		std::string type;				//!< node type
-		T* p;
-		monitor_container monitors;		//!< monitor container
-		Resolver<V>* resolver;
+		bool endpoint;				//!< true if this node is an endpoint
+		std::string type;			//!< node type
+		T* p;						//!< pointer to the observed simulation value. By default it poits to o.
+		monitor_container monitors;	//!< monitor container
+		Resolver<V>* resolver;		//!< resolver for hook execution
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
 		 */
@@ -315,32 +334,35 @@ namespace ds_lg {
 		void hook_outputs();
 	};
 
+	/*!
+	 * Primitive node for combinational 3-valued logic simulation
+	 */
 	class LogicNode : public LGNode<lg_v64, LogicNode>{
 	public:
 	/*!
-	 * initializes public members. By default the node is not an endpoint.
+	 * Initializes public members. By default the node is not an endpoint.
 	 * @param t node type
 	 */
 	LogicNode(const std::string &t):LGNode<lg_v64,LogicNode>(t){}
 	/*!
-	 * revert output to previous value
+	 * Revert output to previous value
 	 */
 	virtual void rollback(){o = bo;}
 	/*!
-	 * save the output value of the base simulation
+	 * Save the output value of the base simulation
 	 */
 	virtual void mark() {bo = o;}
 	/*!
-	 * queries the output value of the base simulation
+	 * Queries the output value of the base simulation
 	 * @return
 	 */
 	lg_v64 get_mark() const {return bo;}
 	/*!
-	 * set output value to the complement of the simulation value
+	 * Set output value to the complement of the fault-free simulation value
 	 */
-	virtual void flip(){o = ~o;};
+	virtual void flip(){o = ~bo;};
 	/*!
-	 * set output value to the complement of the simulation value and apply any attached observer
+	 * Set output value to the complement of the simulation value and apply any attached observer
 	 */
 	void flip_and_observe(){
 		flip();
@@ -375,6 +397,13 @@ namespace ds_lg {
 		}
 		return false;
 	}
+
+	/*!
+	 * No state gates supported. Returns 0.
+	 * @return
+	 */
+	LogicNode* get_sink() {return 0;}
+
 	protected:
 		lg_v64 bo;						//!< backup node output
 		/*!
@@ -382,7 +411,7 @@ namespace ds_lg {
 		 */
 		virtual void hook_inputs();
 		/*!
-		 * processes all hooks at the output ports. Commodity function
+		 * Processes all hooks at the output ports. Commodity function
 		 */
 		virtual void hook_outputs();
 	};
@@ -396,36 +425,36 @@ namespace ds_lg {
 		std::string name;		//!< output name
 	public:
 		/*!
-		 * sets the name of this output node, which is usually the port name in the netlist
+		 * Sets the name of this output node, which is usually the port name in the netlist
 		 * @param n output name
 		 */
 		void set_name(const std::string& n){name = n;}
 		/*!
-		 * returns the given output name
+		 * Returns the given output name
 		 * @return
 		 */
 		virtual std::string get_name() const {return name;}
 		/*!
-		 * simulation value is forwarded form input to output
+		 * Simulation value is forwarded form input to output
 		 */
 		virtual void sim() {
 			o = *a;
 		}
 		/*!
-		 * simulation value is forwarded form input to output. Faults are injected
+		 * Simulation value is forwarded form input to output. Faults are injected
 		 */
 		virtual void hook();
 		/*!
-		 * default values: this node is an endpoint and its type is initialized to "output"
+		 * Default values: this node is an endpoint and its type is initialized to "output"
 		 */
 		Output():LogicNode("output"){ endpoint = true;};
 		/*!
-		 * allocate new Output instance according to the prototype pattern
+		 * Allocate new Output instance according to the prototype pattern
 		 * @return
 		 */
 		virtual Output* clone() const { return new Output();}
 		/*!
-		 * only one input port available
+		 * Only one input port available
 		 * @param name output port name
 		 * @return pointer to this node's input primitive value
 		 */
@@ -445,55 +474,55 @@ namespace ds_lg {
 		ds_pattern::SimPatternBlock** pb;	//!< points current simulation pattern block
 	public:
 		/*!
-		 * sets the name of this output node, which is usually the port name in the netlist
+		 * Sets the name of this output node, which is usually the port name in the netlist
 		 * @param n output name
 		 */
 		void set_name(const std::string& n){name = n;}
 		/*!
-		 * returns the given output name
+		 * Returns the given output name
 		 * @return
 		 */
 		virtual std::string get_name() const {return name;}
 		/*!
-		 * copies the simulation values from the pattern block to this input
+		 * Copies the simulation values from the pattern block to this input
 		 */
 		virtual void sim() {
 			o.v = (*pb)->values[offset].v;
 			o.x = (*pb)->values[offset].x;
 		}
 		/*!
-		 * simulation value is forwarded form input to output. Faults are injected
+		 * Simulation value is forwarded form input to output. Faults are injected
 		 */
 		virtual void hook();
 		/*!
-		 * default values: this node is an endpoint and its type is initialized to "input"
+		 * Default values: this node is an endpoint and its type is initialized to "input"
 		 */
 		Input():LogicNode("input"){};
 		/*!
-		 * allocate new Input instance according to the prototype pattern
+		 * Allocate new Input instance according to the prototype pattern
 		 * @return
 		 */
 		virtual Input* clone() const { return new Input();}
 		/*!
-		 * no inputs in this node
+		 * Returns 0. No inputs in this node
 		 * @param name
-		 * @return null
+		 * @return 0
 		 */
 		virtual lg_v64** get_input(const std::string& name){
 			return 0;
 		}
 		/*!
-		 * sets the address of a pattern block out of which this input is evaluated
+		 * Sets the address of a pattern block out of which this input is evaluated
 		 * @param pattern_block address of current pattern block to simulate
 		 */
 		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){pb = pattern_block;}
 		/*!
-		 * sets the offset in the current pattern block corresponding to this input
+		 * Sets the offset in the current pattern block corresponding to this input
 		 * @param input_offset offset in pattern block
 		 */
 		void set_offset(const std::size_t input_offset){offset = input_offset;}
 		/*!
-		 * return the offset in the current pattern block corresponding to thie input
+		 * Return the offset in the current pattern block corresponding to thie input
 		 * @return
 		 */
 		std::size_t get_offset() const {return offset;}
@@ -512,7 +541,7 @@ namespace ds_lg {
 		 */
 		virtual void sim() {o = (*A)(a);}
 		/*!
-		 * calculate output value by evaluating simulation function with 1 input. Faults are injected
+		 * Calculate output value by evaluating simulation function with 1 input. Faults are injected
 		 */
 		virtual void hook();
 		/*!
@@ -522,12 +551,12 @@ namespace ds_lg {
 		 */
 		LGNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode1I instance according to the prototype pattern
+		 * Allocate new LGNode1I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode1I(type, A);}
 		/*!
-		 * only one input port available
+		 * Only one input port available
 		 * @param name port name
 		 * @return pointer to this node's input value. Null is name does not match.
 		 */
@@ -543,14 +572,14 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b);	//!< pointer to a function expecting 2 simulation value and returning 1 simulation value
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 2 inputs
+		 * Calculate output value by evaluating simulation function with 2 inputs
 		 */
 		virtual void sim() {
 			o = (*A)(a,b);
 			return;
 		}
 		/*!
-		 * calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
+		 * Calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
 		 */
 		virtual void hook();
 		/*!
@@ -560,12 +589,12 @@ namespace ds_lg {
 		 */
 		LGNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode2I instance according to the prototype pattern
+		 * Allocate new LGNode2I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode2I(type, A); }
 		/*!
-		 * two input ports available
+		 * Two input ports available
 		 * @param name port name
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -583,13 +612,13 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c);
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 3 inputs
+		 * Calculate output value by evaluating simulation function with 3 inputs
 		 */
 		virtual void sim() {
 			o = (*A)(a,b,c);
 		}
 		/*!
-		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
+		 * Calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
 		 */
 		virtual void hook();
 		/*!
@@ -599,12 +628,12 @@ namespace ds_lg {
 		 */
 		LGNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode3I instance according to the prototype pattern
+		 * Allocate new LGNode3I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode3I(type, A); }
 		/*!
-		 * three input ports available
+		 * Three input ports available
 		 * @param name port name
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -623,7 +652,7 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d);
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 4 inputs
+		 * Calculate output value by evaluating simulation function with 4 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d);}
 		/*!
@@ -642,7 +671,7 @@ namespace ds_lg {
 		 */
 		virtual LogicNode* clone() const { return new LGNode4I(type, A); }
 		/*!
-		 * four input ports available
+		 * Four input ports available
 		 * @param name port name
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -662,7 +691,7 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d, val64_cpc e);
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 5 inputs
+		 * Calculate output value by evaluating simulation function with 5 inputs
 		 */
 		virtual void sim() { o = (*A)(a,b,c,d,e);}
 		/*!
@@ -676,7 +705,7 @@ namespace ds_lg {
 		 */
 		LGNode5I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode5I instance according to the prototype pattern
+		 * Allocate new LGNode5I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode5I(type, A); }
@@ -714,7 +743,7 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d, val64_cpc e, val64_cpc f);
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 6 inputs
+		 * Calculate output value by evaluating simulation function with 6 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d,e,f);}
 		/*!
@@ -728,7 +757,7 @@ namespace ds_lg {
 		 */
 		LGNode6I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode6I instance according to the prototype pattern
+		 * Allocate new LGNode6I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode6I(type, A); }
@@ -769,12 +798,12 @@ namespace ds_lg {
 		 */
 		LGNode7I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode7I instance according to the prototype pattern
+		 * Allocate new LGNode7I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode7I(type, A); }
 		/*!
-		 * seven input ports available
+		 * Seven input ports available
 		 * @param name port name
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -797,7 +826,7 @@ namespace ds_lg {
 		lg_v64 (*A)(val64_cpc a, val64_cpc b, val64_cpc c, val64_cpc d, val64_cpc e, val64_cpc f, val64_cpc g, val64_cpc h);
 	public:
 		/*!
-		 * calculate output value by evaluating simulation function with 8 inputs
+		 * Calculate output value by evaluating simulation function with 8 inputs
 		 */
 		virtual void sim() {o = (*A)(a,b,c,d,e,f,g,h);}
 		/*!
@@ -811,12 +840,12 @@ namespace ds_lg {
 		 */
 		LGNode8I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
 		/*!
-		 * allocate new LGNode8I instance according to the prototype pattern
+		 * Allocate new LGNode8I instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNode8I(type, A); }
 		/*!
-		 * eight input ports available
+		 * Eight input ports available
 		 * @param name port name
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -833,7 +862,7 @@ namespace ds_lg {
 		bool invert;								//!< true if simulation result is inverted
 	public:
 		/*!
-		 * calculate output value by evaluating an input array
+		 * Calculate output value by evaluating an input array
 		 */
 		virtual void sim() {
 			o = **input_array;
@@ -859,18 +888,18 @@ namespace ds_lg {
 			input_array = new lg_v64*[input_size];
 		};
 		/*!
-		 * allocate new LGNodeArr instance according to the prototype pattern
+		 * Allocate new LGNodeArr instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LGNodeArr(type, input_size, A, invert); }
 		/*!
-		 * returns an output primitive value. Variable-input gates are usually instantiated implicitly. To allow the most inputs without ambiguity, the output name is 'z'
+		 * Returns an output primitive value. Variable-input gates are usually instantiated implicitly. To allow the most inputs without ambiguity, the output name is 'z'
 		 * @param name output port name
 		 * @return pointer to this node's output primitive value
 		 */
 		virtual lg_v64* get_output(const std::string& name) {if (name=="z")return &o; return 0;}
 		/*!
-		 * up to 24 input ports available
+		 * Up to 24 input ports available
 		 * @param name port name (from 'a' to 'y')
 		 * @return pointer to one of this node's input values. Null is name is unknown.
 		 */
@@ -887,7 +916,7 @@ namespace ds_lg {
 	 */
 	class LogicState : public LogicNode {
 	protected:
-		lg_v64 * d;		//!< data input
+		Output d;		//!< data input
 		lg_v64 * cd;	//!< clk input
 		lg_v64 on;		//!< not Q output
 		lg_v64 * rst;
@@ -906,15 +935,14 @@ namespace ds_lg {
 			load_n = &one;
 		}
 		/*!
-		 * update outputs when clk event is active
+		 * Update outputs when clk event is active
 		 */
 		virtual void sim() {
 			o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
 			on = ~o;
 		}
 		virtual void tick(){
-			o = *d;
-			//o = (o & ~*rst & *rst_n) | (*load | ~*load_n);
+			o = d.peek();
 			on = ~o;
 		}
 		/*!
@@ -922,12 +950,11 @@ namespace ds_lg {
 		 */
 		virtual void hook();
 		/*!
-		 * revert output to previous value
+		 * Set output values to the complement of the fault-free simulation values
 		 */
-		virtual void rollback(){o = bo; on = ~bo;}
-		virtual void flip(){o = ~o; on = o;};
+		virtual void flip(){o = ~bo; on = bo;};
 		/*!
-		 * allocate new LGState instance according to the prototype pattern
+		 * Allocate new LGState instance according to the prototype pattern
 		 * @return
 		 */
 		virtual LogicNode* clone() const { return new LogicState(type); }
@@ -956,15 +983,39 @@ namespace ds_lg {
 		 * Virtual destructor
 		 */
 		virtual ~LogicState(){};
+		/*!
+		 * Marks the fault free value. Both for the output and for the internal input node
+		 */
+		virtual void mark() {
+			bo = o;
+			d.mark();
+		}
+		/*!
+		 * Reverts output and internal sink to previous values
+		 */
+		virtual void rollback(){
+			o = bo;
+			d.rollback();
+		}
 	};
 
+	/*!
+	 * This class defines a symbolic clock. All attached registers are updated when the tick method is executed
+	 */
 	template<class R>
 	class ClockPublisher {
 		std::string clk_name;
 		std::vector<R*> subscribers;
 	public:
 		ClockPublisher(const std::string& name):clk_name(name){}
+		/*!
+		 * Attached a register to be updated (ticked)
+		 * @param s register to attach
+		 */
 		void add_subscriber(R* s){subscribers.push_back(s);}
+		/*!
+		 * Updates all registers attached to this publishers
+		 */
 		void tick(){
 			for (R* s: subscribers){
 				s->tick();
@@ -973,7 +1024,12 @@ namespace ds_lg {
 	};
 
 	/*!
-	 *
+	 * Generic leveled graph. This is the base class for any levelized graph with arbitrary data types:
+	 * N: Combinational primitive type
+	 * R: Sequential primitive type
+	 * I: Primary input primitive type
+	 * O: Primary output primitive type
+	 * V: primitive simulation value
 	 */
 	template<class N, class R, class I, class O, class V>
 	class GenericLeveledGraph : public Resolver<N>{
@@ -990,58 +1046,111 @@ namespace ds_lg {
 
 	public:
 
-		lg_input_container inputs;		//!< input ports
-		lg_output_container outputs;	//!< output ports
-		lg_node_container nodes;		//!< all nodes
-		lg_register_container registers;	//!< all sequential elements
-		lg_clock_container clocks;
-		std::list<SimulationHook<N>*> hooks;			//!< all active hooks
+		lg_input_container inputs;				//!< input ports
+		lg_output_container outputs;			//!< output ports
+		lg_node_container nodes;				//!< all nodes
+		lg_register_container registers;		//!< all sequential elements
+		lg_clock_container clocks;				//!< all clocks in the graph
+		std::list<SimulationHook<N>*> hooks;	//!< all active hooks
 
+		/*
+		 * These functions should not be called directly. The Netlist class handles graph creation
+		 */
+
+		/*!
+		 * Sets the netlist for which this graph was generated
+		 * @param netlist the corresponding netlist
+		 */
 		virtual void set_netlist(ds_structural::NetList *netlist) {
 			nl = netlist;
 		}
+		/*!
+		 * Sets the number of levels in the graph
+		 * @param l # of levels
+		 */
 		virtual void set_levels(const int& l){
 			num_levels = l;
 		}
+		/*!
+		 * Sets up a container for each level
+		 * @param levels number of containers to create
+		 */
 		virtual void create_simulation_level(const std::size_t& levels){
 			for (std::size_t l=0;l<levels;l++){
 				simulation.push_back(new lg_node_container());
 			}
 		}
+		/*!
+		 * Convenience function to traverse all graph nodes
+		 * @return iterator to the first graph node
+		 */
 		virtual lg_node_iterator get_nodes_begin(){
 			return nodes.begin();
 		}
+		/*!
+		 * Convenience function to traverse all graph nodes
+		 * @return iterator to the last graph node
+		 */
 		virtual lg_node_iterator get_nodes_end(){
 			return nodes.end();
 		}
+		/*!
+		 * Adds the next primitive node iterator in the levelized sequence
+		 * @param it
+		 */
 		virtual void push_level_iterator(lg_node_iterator it){
 			levels.push_back(it);
 		}
+		/*!
+		 * Obtains an iterator to to the start of the level
+		 * @param level desired level
+		 * @return iterator to the first node with the specified graph level
+		 */
 		virtual lg_node_iterator get_level_iterator(const std::size_t& level){
 			return levels[level];
 		}
+		/*!
+		 * Pushes the number of levels of the next graph level
+		 * @param width number of elements in the next graph level
+		 */
 		virtual void push_level_width(const std::size_t& width){
 			level_width.push_back(width);
 		}
+		/*!
+		 * Returns a pointer to a simulation primitive representing the constant value '1'
+		 * @return
+		 */
 		virtual V* get_constant_0(){
 			return &constant_0;
 		}
+		/*!
+		 * Returns a pointer to a simulation primitive representing the constant value '0'
+		 * @return
+		 */
 		virtual V* get_constant_1(){
 			return &constant_1;
 		}
+		/*!
+		 * Adds a new register primitive node
+		 * @param r register to add
+		 */
 		virtual void add_register(R* r){
 			registers.push_back(r);
 			registry[r->get_name()] = r;
 			reg_registry[r->get_name()] = r;
 			r->set_resolver(this);
 		}
+		/*!
+		 * Adds a new graph node (combinational or sequential). The behavior is undefined if node already exists.
+		 * @param n the node to add
+		 */
 		virtual void add_node(N* n){
 			nodes.push_back(n);
 			registry[n->get_name()] = n;
 			n->set_resolver(this);
 		}
 		/*!
-		 * verify the internal structure of the graph
+		 * Verify the internal structure of the graph
 		 * @return true if check is successful
 		 */
 		bool sanity_check(){
@@ -1077,7 +1186,7 @@ namespace ds_lg {
 			return c;
 		}
 		/*!
-		 * adds an input port
+		 * Adds an input port
 		 * @param in input port
 		 */
 		void add_input(I* in){
@@ -1085,7 +1194,7 @@ namespace ds_lg {
 			registry[in->get_name()] = in;
 		}
 		/*!
-		 * adds an output port
+		 * Adds an output port
 		 * @param out output port
 		 */
 		void add_output(O* out){
@@ -1100,7 +1209,7 @@ namespace ds_lg {
 		lg_output_iterator get_outputs_begin(){return outputs.begin();}
 		lg_output_iterator get_outputs_end(){return outputs.end();}
 		/*!
-		 * adds a new hook to be executed during logic simulation
+		 * Adds a new hook to be executed during logic simulation
 		 * @param hook
 		 */
 		void add_hook(SimulationHook<N>* hook){
@@ -1111,7 +1220,7 @@ namespace ds_lg {
 		}
 
 		/*!
-		 * removes all active hooks
+		 * Removes all active hooks
 		 */
 		void clear_hooks(){
 			for (auto it=hooks.begin();it!=hooks.end();it++){
@@ -1121,7 +1230,10 @@ namespace ds_lg {
 			}
 			hooks.clear();
 		}
-
+		/*!
+		 * Removes a hook
+		 * @param hook The hook to remove
+		 */
 		void clear_hook(SimulationHook<N>* hook){
 			hooks.remove(hook);
 			N *node = hook->get_hook_node(this);
@@ -1135,7 +1247,7 @@ namespace ds_lg {
 			simulation[node->level]->push_back(node);
 		}
 		/*!
-		 * returns the check point of any given node:
+		 * Returns the check point of any given node:
 		 * It returns the argument node pointer is an input, output or fan out node, otherwise
 		 * the argument's fan out node is returned
 		 * @param n node whose check point is requested
@@ -1156,18 +1268,46 @@ namespace ds_lg {
 		 */
 		ds_structural::NetList* get_netlist() const {return nl;}
 
+		/*!
+		 * Finds a node by name
+		 * @param name the name of the desired primitive node
+		 * @return a pointer to the desired primitive node
+		 */
 		virtual N* get_node(const std::string& name) const{
 			auto it = registry.find(name);
 			if(it!=registry.end())
 				return it->second;
 			return 0;
 		}
+		/*!
+		 * Finds a register by name
+		 * @param name the name of the desired primitive register
+		 * @return a pointer to the desired primitive register
+		 */
+		virtual R* get_register(const std::string& name) const{
+			auto it = reg_registry.find(name);
+			if(it!=reg_registry.end())
+				return it->second;
+			return 0;
+		}
 
+		/*!
+		 * Implementation of Resolver interface. Queries the corresponding netlist to find the the equivalent port name of the simulation primitive
+		 * @param node_name netlist gate name
+		 * @param port_name netlist port name
+		 * @return port name or the port in the primitive simulation representation
+		 */
 		virtual std::string get_port_name(const std::string& node_name, const std::string& port_name) const{
 			ds_structural::Gate *g = nl->find_gate(node_name);
 			return g->get_mapping(port_name);
 		}
 
+		/*!
+		 * Adds a symbolic clock to the levled graph
+		 * @param name name of the clock publisher
+		 * @param begin iterator to the first register attached to the clock
+		 * @param end iterator to the last register  attached to the clock
+		 */
 		template<class IT>
 		void add_publisher(const std::string& name, IT begin, IT end){
 			ClockPublisher<R> p(name);
@@ -1183,18 +1323,30 @@ namespace ds_lg {
 		 * @return for each pattern / fault,
 		 * returns 1 in position i if the hook can be propagated to its check point in the ith slot
 		 */
-		ds_common::int64 propagate_to_check_point(SimulationHook<N> *h){
+		lg_v64 propagate_to_check_point(SimulationHook<N> *h){
 			N *n = h->get_hook_node(this);
 			n->add_hook(h);
 
 			N* node = get_check_point(n);
+
+			/*
+			 * Watch out for faults at the outputs of state elements. They propagate to "deeper" checkpoints in the graph
+			 * and NOT the the register sink
+			 */
+			bool state_output = (n==node) && (n->has_state()) && (h->is_output());
+
 			V ff = node->get_mark();
-			bool sink = (node->has_state() && h->is_input()) || (node->has_state() && n != node && h->is_output());
-			if (sink){
-				node->propagate(true);
-				ff = node->peek_sink();
+			if (node->has_state() && !state_output){
+				/*
+				 * This fault is propagated to the checkpoint's sink
+				 */
+				N* sink = node->get_sink();
+				ff = sink->get_mark();
 			}
 
+			/*
+			 * Propagate faults till we find an endpoint
+			 */
 			std::vector<N*> path;
 			path.push_back(n);
 			bool p = n->propagate(true);
@@ -1206,23 +1358,44 @@ namespace ds_lg {
 					if (!n->propagate(true))
 						break;
 				}
-			V faulty = n->peek();
 
-			if (sink){
-				faulty = n->peek_sink();
+			/*
+			 * Assume fault was propagated to a primary output or output of state element
+			 */
+			V faulty = n->peek();
+			if (n->has_state() && !state_output){
+				/*
+				 * Fault was propagated to a state element. Compare to sink
+				 */
+				N* sink = n->get_sink();
+				faulty = sink->peek();
+				sink->rollback();
 			}
 
+			/*
+			 * Revert changes along the fault propagation path
+			 */
 			for (N *p:path){
 				p->rollback();
 			}
+
+			/*
+			 * Check if node was not propagated to endpoint
+			 */
 			if (n!=node){
-				return 0;
+				lg_v64 zero = lg_v64(0,0);
+				return zero;
 			}
 
-			ds_common::int64 result = resolve(ff, faulty);
+			//Compare faulty and fault-free responses
+			lg_v64 result = resolve(ff, faulty);
 			return result;
 		}
 
+		/*!
+		 * Fault-free simulation of a pattern block
+		 * @param pb pattern block to simulate
+		 */
 		virtual void sim(ds_pattern::SimPatternBlock *pb){
 			pattern_block = pb;
 			//propagates events from inputs to outputs
@@ -1236,24 +1409,35 @@ namespace ds_lg {
 				N *node = h->get_hook_node(this);
 				push_node(node);
 			}
+			//Sim
 			sim_intermediate();
 		}
 
+		/*!
+		 * Intermediate fault simulation. Faulty nodes are pushed for evaluation by means of the
+		 * push_node function.
+		 */
 		virtual void sim_intermediate(){
-			std::set<N*> set;
-			std::set<N*> regs;
+			std::set<N*> set;		// fault propagation path
+			std::set<N*> regs;		// affected registers
+
+			/*!
+			 * Iterate all the levels and look for a node to evaluate
+			 */
 			for (int i=0;i<num_levels;i++){
 				lg_node_container* level = simulation[i];
 				iteration++;
 				for (auto it=level->begin();it!=level->end();it++){
 					N *n = *it;
+					// evaluate node
 					bool p = n->propagate(true);
 					if (p){
 						for (N *o : n->outputs){
+							// schedule the evaluation of the outputs outside the fault's current propagation path
 							auto s = set.find(o);
 							if (s==set.end()){
 								if (o->has_state())
-									regs.insert(o);
+									regs.insert(o);		// schedule register for late
 								push_node(o);
 								set.insert(o);
 							}
@@ -1262,11 +1446,13 @@ namespace ds_lg {
 				}
 			}
 
+			// Evaluate register sinks with updated values
 			for (auto it=regs.begin();it!=regs.end();it++){
 				N *n = *it;
 				n->propagate(true);
 			}
 
+			//
 			for (int i=0;i<num_levels;i++){
 				lg_node_container* level = simulation[i];
 				for (auto it=level->begin();it!=level->end();it++){
@@ -1276,11 +1462,9 @@ namespace ds_lg {
 				level->clear();
 			}
 		}
-
-		virtual R* get_register(const std::string& name){
-			return reg_registry[name];
-		}
-
+		/*!
+		 * Template method for internal initialization of derived classes
+		 */
 		virtual void initialize(){}
 
 	protected:
@@ -1290,13 +1474,17 @@ namespace ds_lg {
 		std::vector<lg_node_container*> simulation;			//!< nodes to evaluate during intermediate simulation
 		std::vector<unsigned int> level_width;				//!< number of nodes per level
 		V constant_0;
-		V constant_1;
+		V constant_1;										// constant primitive values
 		V constant_X;
 		ds_structural::NetList *nl;							//!< parent netlist
 		std::unordered_map<std::string, N*> registry;			//!< node map indexed by node instance name
 		std::unordered_map<std::string, R*> reg_registry;			//!< node map indexed by node instance name
 		double iteration;
-		virtual ds_common::int64 resolve(const V& ff, const V& faulty) const = 0;
+		/*!
+		 * Evaluates the difference between primitive values. Used to compare
+		 * the fault-free and faulty simulation values
+		 */
+		virtual lg_v64 resolve(const V& ff, const V& faulty) const = 0;
 	};
 
 	class LeveledGraph : public GenericLeveledGraph<LogicNode,LogicState,Input,Output,lg_v64>{
@@ -1313,8 +1501,11 @@ namespace ds_lg {
 
 	protected:
 
-		ds_common::int64 resolve(const lg_v64& ff, const lg_v64& faulty) const {
-			return ~ff.x & ~faulty.x & (ff.v ^ faulty.v);
+		lg_v64 resolve(const lg_v64& ff, const lg_v64& faulty) const {
+			ds_common::int64 diff = (ff.v ^ faulty.v) & ~ff.x;
+			ds_common::int64 x = (~ff.x & faulty.x);
+			lg_v64 ret(diff,x);
+			return ret;
 		}
 
 	};
@@ -1446,18 +1637,18 @@ namespace ds_lg {
 	/*!
 	 * save the output value of the base simulation
 	 */
-	void mark() {bo = o.value;}
+	virtual void mark() {bo = o.value;}
 	/*!
 	 * queries the output value of the base simulation
 	 * @return
 	 */
 	lg_v64 get_mark() const {return bo;}
 	/*!
-	 * set output value to the complement of the simulation value
+	 * Set output value to the complement of the fault-free simulation value
 	 */
 	virtual void flip(){o.value = ~bo;};
 	/*!
-	 * set output value to the complement of the simulation value and apply any attached observer
+	 * Set output value to the complement of the fault-free simulation value and apply any attached observer
 	 */
 	void flip_and_observe(){
 		flip();
@@ -1502,6 +1693,8 @@ namespace ds_lg {
 		}
 		return 0;
 	}
+
+	TNode* get_sink() {return this;}
 
 	protected:
 		lg_v64 bo;						//!< backup node output
@@ -1796,20 +1989,19 @@ namespace ds_lg {
 		 */
 		virtual void hook();
 		/*!
-		 * revert output to previous value
+		 * Reverts output and internal sink to previous values
 		 */
 		virtual void rollback(){
 			o.value = bo;
 			d.rollback();
 		}
+		/*!
+		 * Set output values to the complement of the fault-free simulation values
+		 */
 		virtual void flip(){
 			o.value = ~bo;
-			o_n.value = ~o_n.value;
+			o_n.value = bo;
 		};
-		virtual void flip_internal(){
-			d.flip();
-		};
-		void mark() {bo = d.peek().value;}
 		/*!
 		 * allocate new LGState instance according to the prototype pattern
 		 * @return
@@ -1846,6 +2038,10 @@ namespace ds_lg {
 		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){
 			pb = pattern_block;
 		}
+		virtual void mark() {
+			bo = o.value;
+			d.mark();
+		}
 		void virtual mark_clock_cycle(){
 			previous = o.value;
 			previous_n = o_n.value;
@@ -1859,17 +2055,12 @@ namespace ds_lg {
 		 */
 		virtual ~TState(){};
 
-		virtual driver_v64 peek_sink()const{
+		virtual driver_v64 peek_input()const {
 			return d.peek();
 		}
 
-		virtual void update() {
-			tick();
-		}
+		TNode* get_sink() {return &d;}
 
-		TNode* get_sink(){
-			return &d;
-		}
 	};
 
 	class TLeveledGraph : public GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>{
@@ -1894,10 +2085,14 @@ namespace ds_lg {
 
 	protected:
 		std::vector<TNode*> combinational;
+
 		std::size_t vector_offset;
-		ds_common::int64 resolve(const driver_v64& ff, const driver_v64& faulty) const {
-			ds_common::int64 diff = (ff.value.v ^ faulty.value.v);
-			return ~ff.value.x & ~faulty.value.x & diff;
+
+		lg_v64 resolve(const driver_v64& ff, const driver_v64& faulty) const {
+			ds_common::int64 diff = (ff.value.v ^ faulty.value.v) & ~ff.value.x;
+			ds_common::int64 x = (~ff.value.x & faulty.value.x);
+			lg_v64 ret(diff,x);
+			return ret;
 		}
 
 	public:
@@ -1909,9 +2104,15 @@ namespace ds_lg {
 		void reset_offset(){
 			vector_offset = 0;
 		}
+		/*!
+		 * Advances the vector offset in the pattern block. This enables the simulation of the next pattern
+		 */
 		void next_vector(){
 			vector_offset += inputs.size() + outputs.size();
 		}
+		/*!
+		 * Symbolic scan operation. Registers are loaded according to the scan values in the pattern block
+		 */
 		void scan(){
 			for (auto it=registers.begin();it!=registers.end();it++){
 				TState *n = *it;
@@ -1919,6 +2120,10 @@ namespace ds_lg {
 			}
 		}
 
+		/*!
+		 * Simulation of two patterns for the simulation of transition delay faults (LOC)
+		 * @param pb pattern block to simulate
+		 */
 		virtual void sim(ds_pattern::SimPatternBlock *pb){
 			pattern_block = pb;
 			reset_offset();

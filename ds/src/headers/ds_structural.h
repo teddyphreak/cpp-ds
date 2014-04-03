@@ -445,7 +445,7 @@ namespace ds_structural {
 		 * @param pb input port to trace
 		 * @param unused holds identified unused gates
 		 */
-		void find_unused_gates(const PortBit *pb, std::vector<const Gate*> *unused);
+		void find_unused_gates(const PortBit *pb, std::set<const Gate*> *unused);
 	public:
 		/*!
 		 * leveled graph pointer is null
@@ -468,13 +468,19 @@ namespace ds_structural {
 		 */
 		void remove_gate(const Gate* g){
 			gates.erase(g->get_instance_name());
+			dettach_gate(g);
+		}
+
+		void dettach_gate(const Gate* g){
+			gates.erase(g->get_instance_name());
 			std::vector<PortBit*> ports;
 			ports.insert(ports.begin(), g->get_inputs()->begin(), g->get_inputs()->end());
 			ports.insert(ports.begin(), g->get_outputs()->begin(), g->get_outputs()->end());
 			for (auto it=ports.begin();it!=ports.end();it++){
 				PortBit* pb = *it;
 				Signal *s = pb->get_signal();
-				s->remove_port(pb);
+				if (s!=0)
+					s->remove_port(pb);
 			}
 		}
 

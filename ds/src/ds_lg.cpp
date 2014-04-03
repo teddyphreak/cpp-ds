@@ -108,7 +108,7 @@ namespace ds_lg {
 	}
 
 	lg_v64** LogicState::get_input(const std::string& name) {
-		if (name == "d")return &d;
+		if (name == "d")return d.get_input("a");
 		if (name == "cd")return &cd;
 		if (name == "rst")return &rst;
 		if (name == "rst_n")return &rst_n;
@@ -354,9 +354,10 @@ namespace ds_lg {
 	}
 
 	void LogicState::hook() {
-		lg_v64 *sd = d;
-		lg_v64 vd = *d;
-		d = &vd;
+
+		lg_v64 *sd = *d.get_input("a");
+		lg_v64 vd(**d.get_input("a"));
+		*d.get_input("a") = &vd;
 		lg_v64 *srst = rst;
 		lg_v64 vrst = *rst;
 		rst = &vrst;
@@ -372,7 +373,7 @@ namespace ds_lg {
 		hook_inputs();
 		sim();
 		hook_outputs();
-		d = sd;
+		*d.get_input("a") = sd;
 		rst = srst;
 		rst_n = srst_n;
 		load = sload;

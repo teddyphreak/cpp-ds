@@ -24,8 +24,8 @@ namespace import_test {
 	{
 		import_ts(const std::string& name):boost::unit_test::test_suite(name)
 	    {
-			circuits_to_test.push_back( "cpu_ip_t03.v" );
-//	    	circuits_to_test.push_back( "p45k.v" );
+			circuits_to_test.push_back( "cpu_ip_fwdctrl_opc_t03.v" );
+//	    	circuits_to_test.push_back( "p45k_nan.v" );
 //	    	circuits_to_test.push_back( "p100k.v" );
 //	    	circuits_to_test.push_back( "p141k.v" );
 //	    	circuits_to_test.push_back( "p239k.v" );

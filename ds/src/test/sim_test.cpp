@@ -49,7 +49,7 @@ void sim_test::test_fc(){
 
 void sim_test::test_tdf(){
 	BOOST_LOG_TRIVIAL(info) << "TDF Test...";
-	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_faults");
+	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns66.wgl", "top", "p45k_nan_faults66");
 //	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
 //	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
 //	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
@@ -178,8 +178,8 @@ void sim_test::lg_loc_test(const std::string& design, const std::string& wgl_fil
 		for (std::size_t i=0;i<provider->get_num_scan_cells();i++){
 			int pos = scan_offset + i;
 			std::string name = provider->get_name(pos);
-			ds_lg::TNode *reg = lg->get_node(name);
-			ds_lg::lg_v64 val = reg->peek_sink().value;
+			ds_lg::TState *reg = lg->get_register(name);
+			ds_lg::lg_v64 val = reg->peek_input().value;
 			if ((val.v & ~spec.values[provider->get_num_scan_cells() + pos].x) != (spec.values[provider->get_num_scan_cells() + pos].v & ~spec.values[provider->get_num_scan_cells() + pos].x)){
 				std::cout << "FF name " << name << "calculated: " << std::hex << val.v << " predicted " << spec.values[provider->get_num_scan_cells() + pos].x << std::endl;
 			}

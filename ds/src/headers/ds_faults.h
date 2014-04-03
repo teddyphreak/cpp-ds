@@ -280,6 +280,43 @@ public:
 	virtual ~StuckAt(){}
 };
 
+class TStuckAt : public StaticFault<ds_lg::TNode, ds_lg::driver_v64> {
+	ds_common::Value value;		//!< stuck-at value
+public:
+	/*!
+	 * Constructs a new stuck-at fault for simulation. It adds a single observed node (also the victim node)
+	 * @param nl netlist where this fault is injected
+	 * @param g gate name
+	 * @param p port name
+	 * @param v stuck-at value. Behavior is undefined if 'X' is provided
+	 */
+	TStuckAt(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v):
+		StaticFault<ds_lg::TNode, ds_lg::driver_v64>(nl, g, p), value(ds_common::BIT_X){
+		if (v == ds_common::BIT_0){
+			value = ds_common::BIT_1;
+		} else if (v == ds_common::BIT_1)
+			value = ds_common::BIT_0;
+		add_condition(this,value);
+	}
+
+	virtual ds_lg::int64 compare(const  ds_lg::driver_v64* a, const  ds_lg::driver_v64& b) const{
+		ds_common::int64 v = a->value.v;
+		ds_common::int64 p = b.value.v;
+		return ~(v ^ p) ;
+	}
+
+	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
+		if (v==ds_common::BIT_0){
+			return ds_lg::lg_v64(0L,0L);
+		} else if (v==ds_common::BIT_1){
+			return ds_lg::lg_v64(-1L,0L);
+		}
+		return ds_lg::lg_v64(0L,-1L);
+	}
+
+	virtual ~TStuckAt(){}
+};
+
 class TransitionFault: public StaticFault<ds_lg::TNode, ds_lg::driver_v64>{
 	ds_common::Value value;		//!< transition value
 public:
