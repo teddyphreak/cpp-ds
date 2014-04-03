@@ -264,6 +264,13 @@ namespace ds_lg {
 		void remove_monitors(){
 			monitors.clear();
 		}
+
+		void delete_monitors(){
+			for (Monitor<T>* m:monitors){
+				delete m;
+			}
+			remove_monitors();
+		}
 		/*!
 		 * Returns the current number of monitors this node has
 		 * @return
@@ -1487,6 +1494,28 @@ namespace ds_lg {
 		virtual lg_v64 resolve(const V& ff, const V& faulty) const = 0;
 	};
 
+	class ErrorObserver : public Monitor<ds_lg::lg_v64> {
+	protected:
+		ds_lg::lg_v64 spec;
+		ds_common::int64 *ds;
+		ds_common::int64 *np;
+	public:
+		ErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
+		virtual void observe(const ds_lg::lg_v64& v) {
+			ds_common::int64 detected = (~spec.x & ~v.x & spec.v & ~v.v) | (~spec.x & ~v.x & ~spec.v & v.v);
+			*ds |= detected;
+
+			ds_common::int64 possibly_detected = ~spec.x & v.x;
+			*np |= (possibly_detected & ~detected);
+		}
+
+		void set_spec(const ds_lg::lg_v64& s){
+			spec.v = s.v;
+			spec.x = s.x;
+		}
+		virtual ~ErrorObserver(){}
+	};
+
 	class LeveledGraph : public GenericLeveledGraph<LogicNode,LogicState,Input,Output,lg_v64>{
 		typedef std::vector<LogicNode*> lg_node_container;
 	public:
@@ -1498,6 +1527,13 @@ namespace ds_lg {
 		}
 
 		void adapt(const ds_pattern::CombinationalPatternAdapter* adapter);
+
+		void attach_output_observers(std::map<LogicNode*, ErrorObserver*>& output_map,
+				ds_common::int64 *detected, ds_common::int64 *possibly_detected);
+
+		void attach_output_observers(ds_common::int64 *detected);
+
+		void remove_output_observers();
 
 	protected:
 
@@ -2063,6 +2099,26 @@ namespace ds_lg {
 
 	};
 
+	class TErrorObserver : public Monitor<ds_lg::driver_v64> {
+	protected:
+		ds_lg::lg_v64 spec;
+		ds_common::int64 *ds;
+		ds_common::int64 *np;
+	public:
+
+		std::string tag;
+
+		TErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
+
+		virtual void observe(const ds_lg::driver_v64& v);
+
+		void set_spec(const ds_lg::lg_v64& s){
+			spec.v = s.v;
+			spec.x = s.x;
+		}
+		virtual ~TErrorObserver(){}
+	};
+
 	class TLeveledGraph : public GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>{
 		typedef std::vector<TNode*> lg_node_container;
 
@@ -2119,6 +2175,12 @@ namespace ds_lg {
 				n->scan();
 			}
 		}
+
+		void attach_output_observers(std::map<TNode*, TErrorObserver*>& output_map,
+						ds_common::int64 *detected, ds_common::int64 *possibly_detected);
+
+		void attach_register_observers(std::map<TNode*, TErrorObserver*>& register_map,
+								ds_common::int64 *detected, ds_common::int64 *possibly_detected);
 
 		/*!
 		 * Simulation of two patterns for the simulation of transition delay faults (LOC)

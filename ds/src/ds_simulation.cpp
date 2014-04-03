@@ -62,10 +62,12 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 	ds_common::int64 possibly_detected;
 
 	//attach observers to the outputs so an error can be identified
-	std::map<LogicNode*, ds_simulation::ErrorObserver*> output_map;
+	std::map<LogicNode*, ds_lg::ErrorObserver*> output_map;
+	lg->attach_output_observers(output_map, &detected, &possibly_detected);
+
 	for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 		LogicNode *o = *it;
-		ds_simulation::ErrorObserver *observer = new ds_simulation::ErrorObserver(&detected, &possibly_detected);
+		ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(&detected, &possibly_detected);
 		output_map[o] = observer;
 		o->add_monitor(observer);
 	}
@@ -81,7 +83,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 		//set the expected value in the observers
 		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 			LogicNode *output = *it;
-			ds_simulation::ErrorObserver *observer = output_map[output];
+			ds_lg::ErrorObserver *observer = output_map[output];
 			observer->set_spec(output->peek());
 		}
 
@@ -147,7 +149,7 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 	for (auto it=output_map.begin();it!=output_map.end();it++){
 
 		LogicNode *output = it->first;
-		ds_simulation::ErrorObserver* observer = it->second;
+		ds_lg::ErrorObserver* observer = it->second;
 		output->remove_monitor(observer);
 		delete observer;
 	}
@@ -214,21 +216,9 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 	ds_common::int64 possibly_detected;
 
 	//attach observers to the outputs and errors so an error can be identified
-	std::map<TNode*, ds_simulation::TErrorObserver*> output_map;
-	for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
-		TNode *o = *it;
-		ds_simulation::TErrorObserver *observer = new ds_simulation::TErrorObserver(&detected, &possibly_detected);
-		output_map[o] = observer;
-		o->add_monitor(observer);
-	}
-	for (auto it=lg->registers.begin(); it!=lg->registers.end();it++){
-		ds_lg::TState *r = *it;
-		TNode *d = r->get_sink();
-		ds_simulation::TErrorObserver *observer = new ds_simulation::TErrorObserver(&detected, &possibly_detected);
-		observer->tag = d->get_name();
-		output_map[d] = observer;
-		d->add_monitor(observer);
-	}
+	std::map<TNode*, ds_lg::TErrorObserver*> output_map;
+	lg->attach_output_observers(output_map, &detected, &possibly_detected);
+	lg->attach_register_observers(output_map, &detected, &possibly_detected);
 
 	int c = 0;
 
@@ -244,7 +234,7 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		//set the expected value in the observers
 		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
 			TNode *output = *it;
-			ds_simulation::TErrorObserver *observer = output_map[output];
+			ds_lg::TErrorObserver *observer = output_map[output];
 			ds_lg::driver_v64 s = output->peek();
 			observer->set_spec(s.value);
 		}
@@ -252,7 +242,7 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 		for (auto it=lg->registers.begin(); it!=lg->registers.end();it++){
 			ds_lg::TState *r = *it;
 			TNode *d = r->get_sink();
-			ds_simulation::TErrorObserver *observer = output_map[d];
+			ds_lg::TErrorObserver *observer = output_map[d];
 			ds_lg::driver_v64 s = r->peek_input();
 			observer->set_spec(s.value);
 		}
@@ -318,31 +308,82 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
 			}
 		}
 	}
-//	// delete allocated objects
-//	for (auto it=output_map.begin();it!=output_map.end();it++){
-//
-//		TNode *output = it->first;
-//		ds_simulation::TErrorObserver* observer = it->second;
-//		output->remove_monitor(observer);
-//		delete observer;
-//	}
-//
-//	for (auto it=in_check_points.begin();it!=in_check_points.end();it++){
-//		std::set<ds_faults::TransitionFault*>* faults = it->second;
-//		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
-//			ds_faults::TransitionFault* f = *f_it;
-//			delete(f);
-//		}
-//		delete faults;
-//	}
-//	ordered_check_points.clear();
+	// delete allocated objects
+	for (auto it=output_map.begin();it!=output_map.end();it++){
+
+		TNode *output = it->first;
+		ds_lg::TErrorObserver* observer = it->second;
+		output->remove_monitor(observer);
+		delete observer;
+	}
+
+	for (auto it=check_points.begin();it!=check_points.end();it++){
+		std::set<ds_faults::TransitionFault*>* faults = it->second;
+		for (auto f_it=faults->begin();f_it!=faults->end();f_it++){
+			ds_faults::TransitionFault* f = *f_it;
+			delete(f);
+		}
+		delete faults;
+	}
 }
 
-void ds_simulation::TErrorObserver::observe(const ds_lg::driver_v64& v) {
-	ds_common::int64 detected = (~spec.x & ~v.value.x & spec.v & ~v.value.v) | (~spec.x & ~v.value.x & ~spec.v & v.value.v);
-	*ds |= detected;
+/*
+ * Usage:
+ *
+ * lg->adapt( instance of pattern adapter)
+ * ds_common::int64 detected;
+ * lg->attach_output_monitors(&detected);
+ *
+ * several calls to
+ *
+ * run_combinational_fault_coverage(lg, mfl, pattern_list, &detected)
+ *
+ * lg->remove_output_monitors();
+ *
+ */
+void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::MFaultList* mfl,
+		ds_pattern::CombinationalPatternList& pattern_list, ds_common::int64 *detected){
 
-	ds_common::int64 possibly_detected = ~spec.x & v.value.x;
-	*np |= (possibly_detected & ~detected);
+	ds_pattern::CombinationalPatternProvider *provider = new ds_pattern::CombinationalPatternProvider(pattern_list);
+
+	ds_faults::FaultList* fl = mfl->get_faultlist();
+	std::vector<SAFaultDescriptor*> undetected;
+	fl->get_undetected_faults(undetected);
+
+	while (provider->has_next()){
+		ds_pattern::SimPatternBlock *block = provider->next();
+
+		lg->sim(block);
+
+		for (SAFaultDescriptor* d: undetected){
+
+			ds_faults::MSAFault locations = mfl->get_MF(d->get_string());
+
+			std::vector<LogicNode*> nodes;
+
+			for (ds_faults::StuckAt* f: locations){
+
+				LogicNode *n = lg->get_node(d->gate_name);
+
+				n->add_hook(f);
+
+				lg->push_node(n);
+
+			}
+
+			*detected = 0;
+
+			lg->sim_intermediate();
+
+			if (detected != 0){
+				fl->set_fault_category(d, ds_faults::DS);
+			}
+
+			for (LogicNode *n:nodes){
+				n->remove_hooks();
+			}
+
+		}
+	}
 }
 

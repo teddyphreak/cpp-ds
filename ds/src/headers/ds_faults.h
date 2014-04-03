@@ -488,6 +488,8 @@ public:
 	 */
 	FaultList(ds_structural::NetList* nl);
 
+	FaultList(){};
+
 	template<typename I>
 	FaultList(I begin, I end){
 		for (I it=begin;it!=end;it++){
@@ -586,6 +588,12 @@ public:
 	 * @return the fault coverage
 	 */
 	double get_fc() const;
+
+	void add_undetected(SAFaultDescriptor* f){
+		representatives[f->get_string()] = f;
+		uk.insert(f);
+		fault_map[f] = UK;
+	}
 private:
 	/*!
 	 * reurns the container matching the provided fault category
@@ -652,7 +660,26 @@ bool parse_fastscan_faults(Iterator first, Iterator last, std::vector<fastscan_d
 	return parse;
 }
 
+typedef std::vector<ds_faults::StuckAt*> MSAFault;
+
 void read_fastscan_descriptors(const std::string& file_name, std::vector<fastscan_descriptor>& descriptors);
+
+class MFaultList {
+ private:
+	ds_faults::FaultList flst;
+	std::unordered_map<std::string, MSAFault> mflst;
+
+ public:
+	MFaultList();
+	MFaultList(ds_structural::NetList* nl, std::string filename);
+
+	bool load_MFL(ds_structural::NetList* nl, std::string filename);
+	bool add(ds_structural::NetList* nl, std::string definition);
+
+	ds_faults::FaultList* get_faultlist();
+	MSAFault get_MF(std::string descriptor);
+};
+
 
 }
 #endif /* DS_FAULTS_H_ */

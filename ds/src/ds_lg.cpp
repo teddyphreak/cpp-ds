@@ -547,6 +547,35 @@ namespace ds_lg {
 		}
 	}
 
+	void ds_lg::LeveledGraph::attach_output_observers(std::map<ds_lg::LogicNode*, ds_lg::ErrorObserver*>& output_map,
+					ds_common::int64 *detected, ds_common::int64 *possibly_detected){
+
+		for (auto it=outputs.begin(); it!=outputs.end();it++){
+			LogicNode *o = *it;
+			ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(detected, possibly_detected);
+			output_map[o] = observer;
+			o->add_monitor(observer);
+		}
+	}
+
+	void ds_lg::LeveledGraph::attach_output_observers(ds_common::int64 *detected){
+
+		for (auto it=outputs.begin(); it!=outputs.end();it++){
+			LogicNode *o = *it;
+			ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(detected, 0);
+			o->add_monitor(observer);
+		}
+	}
+
+	void ds_lg::LeveledGraph::remove_output_observers(){
+
+		for (auto it=outputs.begin(); it!=outputs.end();it++){
+			LogicNode *o = *it;
+			o->delete_monitors();
+		}
+	}
+
+
 	void TLeveledGraph::adapt(const ds_pattern::SequentialPatternAdapter* adapter){
 		// prepare input for simulation: set pattern block and offset
 		for (TInput* in:inputs){
@@ -589,5 +618,37 @@ namespace ds_lg {
 		nodes.insert(nodes.begin(), registers.begin(), registers.end());
 	}
 
+	void TErrorObserver::observe(const ds_lg::driver_v64& v) {
+		ds_common::int64 detected = (~spec.x & ~v.value.x & spec.v & ~v.value.v) | (~spec.x & ~v.value.x & ~spec.v & v.value.v);
+		*ds |= detected;
+
+		ds_common::int64 possibly_detected = ~spec.x & v.value.x;
+		*np |= (possibly_detected & ~detected);
+	}
+
+	void ds_lg::TLeveledGraph::attach_output_observers(std::map<ds_lg::TNode*, ds_lg::TErrorObserver*>& output_map,
+		ds_common::int64 *detected, ds_common::int64 *possibly_detected){
+
+		for (auto it=outputs.begin(); it!=outputs.end();it++){
+			TNode *o = *it;
+			ds_lg::TErrorObserver *observer = new ds_lg::TErrorObserver(detected, possibly_detected);
+			output_map[o] = observer;
+			o->add_monitor(observer);
+		}
+	}
+
+	void ds_lg::TLeveledGraph::attach_register_observers(std::map<ds_lg::TNode*, ds_lg::TErrorObserver*>& register_map,
+		ds_common::int64 *detected, ds_common::int64 *possibly_detected){
+
+		for (auto it=registers.begin(); it!=registers.end();it++){
+			ds_lg::TState *r = *it;
+			TNode *d = r->get_sink();
+			ds_lg::TErrorObserver *observer = new ds_lg::TErrorObserver(detected, possibly_detected);
+			observer->tag = d->get_name();
+			register_map[d] = observer;
+			d->add_monitor(observer);
+		}
+
+	}
 }
 

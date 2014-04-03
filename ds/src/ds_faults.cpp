@@ -11,7 +11,12 @@
 #include "ds_workspace.h"
 #include "ds_structural.h"
 #include "ds_common.h"
+
 #include <boost/log/trivial.hpp>
+#include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+
 
 using ds_faults::SAFaultDescriptor;
 
@@ -353,7 +358,61 @@ ds_lg::int64 ds_faults::TransitionFault::compare(const ds_lg::driver_v64* a, con
 	ds_lg::lg_v64 t = b.value;
 	const ds_lg::TNode *driver = a->driver;
 	const ds_lg::lg_v64 *p = driver->get_previous_value(a->port_id);
-	ds_lg::int64 cond = ((~p->v & v.v & t.v) | (p->v & ~v.v & ~t.v)); //& ~v.x & ~t.x & ~p->x;
-	//std::cout << std::hex << "v:" << v.v << " t:" << t.v << " p:" << p->v << " cond" << cond << std::endl;
+	ds_lg::int64 cond = ((~p->v & v.v & t.v) | (p->v & ~v.v & ~t.v)) & ~v.x & ~t.x & ~p->x;
 	return cond;
+}
+
+
+ds_faults::MFaultList::MFaultList() : flst(ds_faults::FaultList()), mflst({}) {}
+
+ds_faults::MFaultList::MFaultList(ds_structural::NetList* nl, std::string filename) : MFaultList() {
+	load_MFL(nl, filename);
+}
+
+bool ds_faults::MFaultList::load_MFL(ds_structural::NetList* nl, std::string filename) {
+    std::ifstream ifs(filename);
+    std::string def;
+    if (!ifs.is_open()) {
+    	return false;
+    }
+    while (!ifs.eof()) {
+        std::getline(ifs, def);
+        if (!add(nl, def)) {
+        	return false;
+        }
+    }
+    return true;
+}
+
+// line format example: \inst_cpu_ip_alx/alx_e_dra_reg[0] @Q@1=\inst_cpu_ip_alx/alx_e_dra_reg_T2[0] @Z@1,SI273@Z@1,\inst_cpu_ip_alx/alx_e_dra_reg_T3[0] @Z@1,
+bool ds_faults::MFaultList::add(ds_structural::NetList* nl, std::string definition) {
+    boost::regex rx_def("([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]*)@([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]+)@([01])=(.*)");
+    boost::regex rx_singlefault("([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]*)@([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]+)@([01])");
+    boost::smatch match;
+
+    if (!boost::regex_search(definition, match, rx_def)) {
+    	return false;
+    }
+
+    ds_faults::SAFaultDescriptor* saf = new ds_faults::SAFaultDescriptor(match[1].str(),match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3]));
+    std::string fl = match[4].str();
+    std::vector<std::string> sfd;
+    boost::algorithm::split(sfd, fl, boost::algorithm::is_any_of(","));
+    for (std::string sf : sfd) {             //for all single faults of this fault group:
+        if (!boost::regex_search(sf, match, rx_singlefault)) {
+        	return false;
+        }
+        ds_faults::StuckAt* sa = new ds_faults::StuckAt(nl, match[1].str(), match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3]));
+        mflst[saf->get_string()].push_back(sa);
+    }
+    flst.add_undetected(saf);
+    return true;
+}
+
+ds_faults::FaultList* ds_faults::MFaultList::get_faultlist() {
+	return &flst;
+}
+
+ds_faults::MSAFault ds_faults::MFaultList::get_MF(std::string descriptor) {
+	return mflst[descriptor];
 }

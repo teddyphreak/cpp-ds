@@ -15,51 +15,14 @@
 
 namespace ds_simulation {
 
-class ErrorObserver : public ds_lg::Monitor<ds_lg::lg_v64> {
-protected:
-	ds_lg::lg_v64 spec;
-	ds_common::int64 *ds;
-	ds_common::int64 *np;
-public:
-	ErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
-	virtual void observe(const ds_lg::lg_v64& v) {
-		ds_common::int64 detected = (~spec.x & ~v.x & spec.v & ~v.v) | (~spec.x & ~v.x & ~spec.v & v.v);
-		*ds |= detected;
+void run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::FaultList* fl,
+		ds_pattern::CombinationalPatternProvider* provider);
 
-		ds_common::int64 possibly_detected = ~spec.x & v.x;
-		*np |= (possibly_detected & ~detected);
-	}
+void run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_faults::FaultList* fl,
+		ds_pattern::SequentialPatternProvider* provider);
 
-	void set_spec(const ds_lg::lg_v64& s){
-		spec.v = s.v;
-		spec.x = s.x;
-	}
-	virtual ~ErrorObserver(){}
-};
-
-class TErrorObserver : public ds_lg::Monitor<ds_lg::driver_v64> {
-protected:
-	ds_lg::lg_v64 spec;
-	ds_common::int64 *ds;
-	ds_common::int64 *np;
-public:
-
-	std::string tag;
-
-	TErrorObserver(ds_common::int64* d, ds_common::int64* n):ds(d), np(n){}
-
-	virtual void observe(const ds_lg::driver_v64& v);
-
-	void set_spec(const ds_lg::lg_v64& s){
-		spec.v = s.v;
-		spec.x = s.x;
-	}
-	virtual ~TErrorObserver(){}
-};
-
-void run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::FaultList* fl, ds_pattern::CombinationalPatternProvider* provider);
-
-void run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_faults::FaultList* fl, ds_pattern::SequentialPatternProvider* provider);
+void run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::MFaultList* mfl,
+		ds_pattern::CombinationalPatternList& provider, ds_common::int64 *detected);
 
 }
 
