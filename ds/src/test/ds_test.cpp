@@ -13,6 +13,7 @@
 #include "faults_test.h"
 #include "serialization_test.h"
 #include "trans_test.h"
+#include "diagnosis_test.h"
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
@@ -46,6 +47,9 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //
 //	trans_test::trans_ts *trans = new trans_test::trans_ts("trans_ts");
 //	test->add( trans );
+//
+//	diagnosis_test::diagnosis_ts *diagnosis = new diagnosis_test::diagnosis_ts("diagnosis_ts");
+//	test->add( diagnosis );
 
     return test;
 }

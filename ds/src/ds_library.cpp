@@ -217,6 +217,57 @@ void ds_library::Library::load_nodes(){
 		tregister_prototypes[s->get_type()] = s;
 	}
 
+	std::list<ds_timing::TNode*> ts_list;
+	ds_timing::TNode *ts_node = new ds_timing::TNode1I("not", f_not);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode1I("not1", f_not);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode1I("buf", f_buf);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode1I("buf1", f_buf);
+	ts_list.push_back(ts_node);
+
+	ts_node = new ds_timing::TNode2I("and2", f_and2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode2I("or2", f_or2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode2I("nand2", f_nand2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode2I("nor2", f_nor2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode2I("xor2", f_xor2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode2I("xnor2", f_xnor2);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("and3", f_and3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("or3",f_or3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("nand3",f_nand3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("nor3",f_nor3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("xor3",f_xor3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("xnor3",f_xnor3);
+	ts_list.push_back(ts_node);
+	ts_node = new ds_timing::TNode3I("mux2",f_mux2);
+	ts_list.push_back(ts_node);
+
+	std::list<ds_timing::TState*> ts_states;
+	ds_timing::TState* ts_reg = new ds_timing::TState("FD2");
+	ts_list.push_back(ts_reg);
+	ts_states.push_back(ts_reg);
+	// fill up prototype registry
+	for (auto it=ts_list.begin();it!=ts_list.end();it++){
+		ds_timing::TNode *n = *it;
+		ts_prototypes[n->get_type()] = n;
+	}
+	// fill up register prototype
+	for (auto it=ts_states.begin();it!=ts_states.end();it++){
+		ds_timing::TState *s = *it;
+		ts_register_prototypes[s->get_type()] = s;
+	}
 }
 
 ds_library::Library* ds_library::LibraryFactory::load_library(const std::string& name){

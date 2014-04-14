@@ -97,6 +97,8 @@ namespace ds_lg {
 		 * @param v current simulation value
 		 */
 		virtual void observe(const T& v) = 0;
+
+		virtual ~Monitor(){}
 	};
 
 	/*!
@@ -122,6 +124,7 @@ namespace ds_lg {
 			(*pb)->values[offset].v = v.v;
 			(*pb)->values[offset].x = v.x;
 		}
+
 	};
 
 	/*!
@@ -323,6 +326,9 @@ namespace ds_lg {
 		void remove_hooks(){
 			hooks.clear();
 		}
+
+		virtual lg_v64 resolve() const =0;
+
 	public:
 		typedef typename std::vector<Monitor<T>*> monitor_container;
 		T o; 						//!< node output
@@ -410,6 +416,10 @@ namespace ds_lg {
 	 * @return
 	 */
 	LogicNode* get_sink() {return 0;}
+
+	virtual lg_v64 resolve() const {
+		return peek();
+	}
 
 	protected:
 		lg_v64 bo;						//!< backup node output
@@ -1049,6 +1059,7 @@ namespace ds_lg {
 		typedef typename std::vector<O*>::iterator lg_output_iterator;
 		typedef typename std::vector<ClockPublisher<R> > lg_clock_container;
 		typedef typename std::vector<R*> lg_register_container;
+		typedef typename std::vector<R*>::iterator lg_register_iterator;
 
 
 	public:
@@ -1215,6 +1226,8 @@ namespace ds_lg {
 		lg_input_iterator get_inputs_end(){return inputs.end();}
 		lg_output_iterator get_outputs_begin(){return outputs.begin();}
 		lg_output_iterator get_outputs_end(){return outputs.end();}
+		lg_register_iterator get_registers_begin(){return registers.begin();}
+		lg_register_iterator get_registers_end(){return registers.end();}
 		/*!
 		 * Adds a new hook to be executed during logic simulation
 		 * @param hook
@@ -1732,6 +1745,10 @@ namespace ds_lg {
 
 	TNode* get_sink() {return this;}
 
+	virtual lg_v64 resolve() const {
+		return peek().value;
+	}
+
 	protected:
 		lg_v64 bo;						//!< backup node output
 		lg_v64 previous;
@@ -2206,20 +2223,29 @@ namespace ds_lg {
 
 			clocks[0].tick();
 
+			for (SimulationHook<TNode>* h: hooks){
+				TNode *node = h->get_hook_node(this);
+				node->add_hook(h);
+			}
+
 			next_vector();
 			//propagates events from inputs to outputs --> CAPTURE
 			for (auto it=combinational.begin();it!=combinational.end();it++){
 				TNode *n = *it;
-				n->propagate(false);
+				n->propagate(true);
 				n->mark();
 			}
 
 			for (auto it=registers.begin();it!=registers.end();it++){
 				TNode *n = *it;
-				n->propagate(false);
+				n->propagate(true);
 				n->mark();
 			}
 
+			for (SimulationHook<TNode>* h: hooks){
+				TNode *node = h->get_hook_node(this);
+				node->remove_hooks();
+			}
 		}
 	};
 }

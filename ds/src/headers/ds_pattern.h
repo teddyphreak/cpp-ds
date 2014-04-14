@@ -551,6 +551,7 @@ namespace ds_pattern {
 	 * Derived classes adapt a test pattern set for efficient access during simulation
 	 */
 	class PatternProvider {
+	public:
 		virtual bool has_next() const = 0;
 		virtual SimPatternBlock* next() = 0;
 		virtual void reset() = 0;

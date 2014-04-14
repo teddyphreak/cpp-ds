@@ -9,6 +9,7 @@
 #include "ds_library.h"
 #include "ds_structural.h"
 #include "ds_workspace.h"
+#include "ds_timing.h"
 #include <iostream>
 #include <fstream>
 
@@ -31,6 +32,31 @@ void import_test::import_netlist(const std::string& name) {
 		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 		BOOST_CHECK(lg->sanity_check());
 		delete nl;
+
+	} catch (boost::exception& e){
+
+		if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) ){
+			BOOST_LOG_TRIVIAL(error) << *mi;
+			std::cerr << "Error: " << *mi;
+		}
+	}
+}
+
+void import_test::import_sdf(const std::string& name) {
+
+	ds_library::load_default_lib();
+	const char* d = getenv("DS");
+	if (!d){
+		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
+	}
+	std::string path = d?d:"";
+	try {
+
+		std::string file = path + "/files/" + name;
+		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
+		ds_timing::sdf_data data;
+		bool p = ds_timing::parse_sdf(file, data);
+		BOOST_CHECK(p);
 
 	} catch (boost::exception& e){
 

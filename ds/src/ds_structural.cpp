@@ -4,9 +4,10 @@
  *  Created on: Sep 18, 2012
  *      Author: cookao
  */
-#include "ds_lg.h"
-#include "ds_library.h"
 #include "ds_structural.h"
+#include "ds_lg.h"
+#include "ds_timing.h"
+#include "ds_library.h"
 #include "ds_workspace.h"
 #include <queue>
 #include <boost/lambda/bind.hpp>
@@ -310,6 +311,34 @@ ds_lg::TLeveledGraph* ds_structural::NetList::get_loc_graph(ds_library::Library 
 	ds_lg::TLeveledGraph *lg = new ds_lg::TLeveledGraph();
 	ds_lg::TInput in;
 	ds_lg::TOutput out;
+	build_leveled_graph(lg,node_map,state_map,in,out);
+	bool c = lg->sanity_check();
+	lg->setup();
+	if (!c){
+		BOOST_LOG_TRIVIAL(warning) << "Sanity check failed";
+	}
+	return lg;
+}
+
+ds_timing::TLeveledGraph* ds_structural::NetList::get_ts_graph(ds_library::Library *lib){
+	std::map<Gate*,ds_timing::TNode*> node_map;
+	std::map<Gate*,ds_timing::TState*> state_map;
+	for (auto it=gates.begin();it!=gates.end();it++){
+		Gate *g = it->second;
+		ds_timing::TState *s = lib->get_ts_register_primitive(g->get_type(), g->get_num_ports());
+		if (s!=0){
+			state_map[g] = s;
+			node_map[g] = s;
+		} else {
+			ds_timing::TNode *n = lib->get_ts_primitive(g->get_type(), g->get_num_ports());
+			if (n!=0){
+				node_map[g] = n;
+			}
+		}
+	}
+	ds_timing::TLeveledGraph *lg = new ds_timing::TLeveledGraph();
+	ds_timing::TInput in;
+	ds_timing::TOutput out;
 	build_leveled_graph(lg,node_map,state_map,in,out);
 	bool c = lg->sanity_check();
 	lg->setup();

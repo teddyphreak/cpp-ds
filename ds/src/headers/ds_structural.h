@@ -42,6 +42,10 @@ namespace ds_lg {
 	class Output;
 }
 
+namespace ds_timing {
+	class TLeveledGraph;
+}
+
 namespace ds_library {
 	struct instance_visitor;
 	class Library;
@@ -615,6 +619,8 @@ namespace ds_structural {
 				}
 			}
 		}
+
+		ds_timing::TLeveledGraph* get_ts_graph(ds_library::Library *lib);
 
 		ds_lg::TLeveledGraph* get_loc_graph(ds_library::Library *lib);
 		/*!

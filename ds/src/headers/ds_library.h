@@ -10,6 +10,7 @@
 
 #include "ds_common.h"
 #include "ds_lg.h"
+#include "ds_timing.h"
 #include <fstream>
 #include <map>
 #include <boost/spirit/repository/include/qi_distinct.hpp>
@@ -61,6 +62,8 @@ namespace ds_library {
 	typedef std::map<std::string, ds_library::LogicFunction> type_map_t;
 	typedef std::map<std::string, ds_lg::TNode*>  lgn_tmap_t;
 	typedef std::map<std::string, ds_lg::TState*> lgn_tregister_map_t;
+	typedef std::map<std::string, ds_timing::TNode*>  lgn_ts_map_t;
+	typedef std::map<std::string, ds_timing::TState*> lgn_ts_register_map_t;
 
 	const std::string value_0 = "0";	//!< constant '0'
 	const std::string value_1 = "1";	//!< constant '1'
@@ -176,6 +179,39 @@ namespace ds_library {
 		return 0;
 	}
 
+	ds_timing::TNode* get_ts_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				std::string lgn_name = prototype_map[name];
+				ds_timing::TNode *n = ts_prototypes[lgn_name];
+				ds_timing::TNode *copy = n->clone();
+				return copy;
+			}
+		}
+		return 0;
+	}
+
+	ds_timing::TState* get_ts_register_primitive(const std::string& name, const std::size_t ports){
+		gate_map_t::const_iterator gate_it = gate_map.find(name);
+		if (gate_it != gate_map.end()){
+			ds_structural::Gate *c = gate_it->second;
+			if (c->get_num_ports() == ports){
+				std::string reg_name = prototype_map[name];
+				auto it = register_prototypes.find(reg_name);
+				if (it!=register_prototypes.end()){
+					ds_timing::TState *s = ts_register_prototypes[reg_name];
+					ds_timing::TState *copy = s->clone_register();
+					return copy;
+				} else {
+					return 0;
+				}
+			}
+		}
+		return 0;
+	}
+
 	/*!
 	 * retrieves a copy of the desired gate according to the prototype design pattern
 	 * @param name name of desired gate
@@ -248,10 +284,16 @@ namespace ds_library {
 
 	protected:
 		gate_map_t gate_map; 						//!< available gates in the library
-		lgn_map_t prototypes;						//!< simulation primitives
-		lgn_register_map_t register_prototypes;		//!< simulation primitives
-		lgn_tmap_t tprototypes;						//!< simulation primitives
+
+		lgn_map_t prototypes;							//!< simulation primitives (LGNode)
+		lgn_register_map_t register_prototypes;			//!< simulation primitives
+
+		lgn_tmap_t tprototypes;							//!< simulation primitives (TNode)
 		lgn_tregister_map_t tregister_prototypes;		//!< simulation primitives
+
+		lgn_ts_map_t ts_prototypes;						//!< simulation primitives (ds_timing::TNode)
+		lgn_ts_register_map_t ts_register_prototypes;		//!< simulation primitives
+
 		type_map_t types;							//!< boolean logic implemented by each function
 		function_map functions;						//!< evaluation functions of 2 operands
 		inversion_map inversion;					//!< true when the function entry is to be complemented

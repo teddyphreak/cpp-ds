@@ -45,6 +45,8 @@ void ds_faults::get_fault_classes(ds_structural::Gate* g, std::vector<std::list<
 	case ds_library::NOR:
 		ds_faults::get_gate_faults(g, ds_common::BIT_1, ds_common::BIT_1, fault_classes);
 		break;
+	case ds_library::XOR:
+	case ds_library::XNOR:
 	default:
 		//generate all outputs faults if gate type is not found
 		BOOST_LOG_TRIVIAL(trace) << "Generating all port faults for gate: " << gate_type << " " << f;
@@ -177,7 +179,8 @@ std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* ds_faults::get_fa
 	std::map<std::string, SAFaultDescriptor*> fault_registry;
 	for (auto it=fault_classes.begin();it!=fault_classes.end();it++){
 		std::list<SAFaultDescriptor*>* f_class = *it;
-		SAFaultDescriptor *rep = *f_class->begin();
+		auto out_it = f_class->begin();
+		SAFaultDescriptor *rep = *out_it;
 		(*universe)[rep] = f_class;
 		for (auto it=f_class->begin();it!=f_class->end();it++){
 			SAFaultDescriptor *d = *it;
@@ -222,23 +225,24 @@ std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* ds_faults::get_fa
 			std::list<SAFaultDescriptor*> *merge1 = (*universe)[rep_victim1];
 			std::list<SAFaultDescriptor*> *merge0 = (*universe)[rep_victim0];
 
-			equivalent0->insert(equivalent0->begin(), merge0->begin(), merge0->end());
-			equivalent1->insert(equivalent1->begin(), merge1->begin(), merge1->end());
-
-			//update representative map
-			for (auto it=merge1->begin();it!=merge1->end();it++){
-				descriptor_map[*it] = rep_aggressor1;
+			if (equivalent0->size() == 1 || merge0->size() == 1){
+				equivalent0->insert(equivalent0->begin(), merge0->begin(), merge0->end());
+				//update representative map
+				for (auto it=merge0->begin();it!=merge0->end();it++){
+					descriptor_map[*it] = rep_aggressor0;
+				}
+				delete (merge0);
+				universe->erase(rep_victim0);
 			}
 
-			for (auto it=merge0->begin();it!=merge0->end();it++){
-				descriptor_map[*it] = rep_aggressor0;
+			if (equivalent1->size() == 1 || merge1->size() == 1){
+				equivalent1->insert(equivalent1->begin(), merge1->begin(), merge1->end());
+				for (auto it=merge1->begin();it!=merge1->end();it++){
+					descriptor_map[*it] = rep_aggressor1;
+				}
+				delete (merge1);
+				universe->erase(rep_victim1);
 			}
-
-			//delete unused containers
-			delete (merge0);
-			delete (merge1);
-			universe->erase(rep_victim0);
-			universe->erase(rep_victim1);
 		}
 	}
 	return universe;

@@ -49,7 +49,7 @@ void sim_test::test_fc(){
 
 void sim_test::test_tdf(){
 	BOOST_LOG_TRIVIAL(info) << "TDF Test...";
-	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns66.wgl", "top", "p45k_nan_faults66");
+	fc_tdf_test("p45k_nan_sff.v", "p45k_nan_patterns66.wgl", "top", "p45k_nan_faults");
 //	fc_tdf_test("p100k_nan_sff.v", "p100k_nan_patterns.wgl", "top", "p100k_nan_faults");
 //	fc_tdf_test("p141k_nan_sff.v", "p141k_nan_patterns.wgl", "top", "p141k_nan_faults");
 //	fc_tdf_test("p267k_nan_sff.v", "p267k_nan_patterns.wgl", "top", "p267k_nan_faults");
