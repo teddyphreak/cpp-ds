@@ -21,30 +21,30 @@ void sim_test::test_sim(){
 	BOOST_LOG_TRIVIAL(info) << "Simulation Test...";
 	lg_sim_test("p45k_nan.v", "p45k.wgl", "top");
 	lg_sim_test("p100k_nan.v", "p100k.wgl", "top");
-	lg_sim_test("p141k_nan.v", "p141k.wgl", "top");
-	lg_sim_test("p239k_nan.v", "p239k.wgl", "top");
-	lg_sim_test("p259k_nan.v", "p259k.wgl", "top");
-	lg_sim_test("p267k_nan.v", "p267k.wgl", "top");
-	lg_sim_test("p269k_nan.v", "p269k.wgl", "top");
-	lg_sim_test("p279k_nan.v", "p279k.wgl", "top");
-	lg_sim_test("p286k_nan.v", "p286k.wgl", "top");
-	lg_sim_test("p295k_nan.v", "p295k.wgl", "top");
-	lg_sim_test("p330k_nan.v", "p330k.wgl", "top");
+//	lg_sim_test("p141k_nan.v", "p141k.wgl", "top");
+//	lg_sim_test("p239k_nan.v", "p239k.wgl", "top");
+//	lg_sim_test("p259k_nan.v", "p259k.wgl", "top");
+//	lg_sim_test("p267k_nan.v", "p267k.wgl", "top");
+//	lg_sim_test("p269k_nan.v", "p269k.wgl", "top");
+//	lg_sim_test("p279k_nan.v", "p279k.wgl", "top");
+//	lg_sim_test("p286k_nan.v", "p286k.wgl", "top");
+//	lg_sim_test("p295k_nan.v", "p295k.wgl", "top");
+//	lg_sim_test("p330k_nan.v", "p330k.wgl", "top");
 };
 
 void sim_test::test_fc(){
 	BOOST_LOG_TRIVIAL(info) << "FC Test";
-	fc_test("p45k.v", "p45k.dsp", "top");
-	fc_test("p100k.v", "p100k.dsp", "top");
-	fc_test("p141k.v", "p141k.dsp", "top");
-	fc_test("p239k.v", "p239k.dsp", "top");
-	fc_test("p259k.v", "p259k.dsp", "top");
-	fc_test("p267k.v", "p267k.dsp", "top");
-	fc_test("p269k.v", "p269k.dsp", "top");
-	fc_test("p279k.v", "p279k.dsp", "top");
-	fc_test("p286k.v", "p286k.dsp", "top");
-	fc_test("p295k.v", "p295k.dsp", "top");
-	fc_test("p330k.v", "p330k.dsp", "top");
+	fc_test("test.v", "fs_results.wgl", "cpu_ip");
+//	fc_test("p100k.v", "p100k.dsp", "top");
+//	fc_test("p141k.v", "p141k.dsp", "top");
+//	fc_test("p239k.v", "p239k.dsp", "top");
+//	fc_test("p259k.v", "p259k.dsp", "top");
+//	fc_test("p267k.v", "p267k.dsp", "top");
+//	fc_test("p269k.v", "p269k.dsp", "top");
+//	fc_test("p279k.v", "p279k.dsp", "top");
+//	fc_test("p286k.v", "p286k.dsp", "top");
+//	fc_test("p295k.v", "p295k.dsp", "top");
+//	fc_test("p330k.v", "p330k.dsp", "top");
 };
 
 void sim_test::test_tdf(){
@@ -84,17 +84,25 @@ void sim_test::fc_test(const std::string& design, const std::string& wgl_file, c
 	std::string pattern_file = path + "/files/" + wgl_file;
 	std::string design_file = path + "/files/" + design;
 
-	ds_pattern::CombinationalPatternProvider* provider = 0;
-	{
-		std::ifstream ifs(pattern_file);
-		boost::archive::binary_iarchive ia(ifs);
-		ia >> provider;
-	}
+//	ds_pattern::CombinationalPatternProvider* provider = 0;
+//	{
+//		std::ifstream ifs(pattern_file);
+//		boost::archive::binary_iarchive ia(ifs);
+//		ia >> provider;
+//	}
+
+	ds_pattern::CombinationalPatternProvider* provider = ds_pattern::load_combinational_blocks(pattern_file, false);
 
 	ds_structural::NetList* nl = ds_workspace::load_netlist(top,design_file);
 	ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
 	BOOST_LOG_TRIVIAL(info) << "Calculating fault set...";
-	ds_faults::FaultList fl(nl);
+
+	std::vector<ds_faults::fastscan_descriptor> descriptors;
+	ds_faults::read_fastscan_descriptors(path + "/files/fs_result.lst", descriptors);
+	BOOST_LOG_TRIVIAL(info) << descriptors.size() << " faults found";
+	ds_faults::FaultList fl(descriptors.begin(), descriptors.end());
+
+	//ds_faults::FaultList fl(nl);
 	BOOST_LOG_TRIVIAL(info) << "Beginning fault coverage calculation";
 
 	ds_simulation::run_combinational_fault_coverage(lg, &fl, provider);

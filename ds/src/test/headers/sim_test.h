@@ -24,9 +24,9 @@ namespace sim_test {
 		sim_ts(const std::string& name):boost::unit_test::test_suite(name)
 		{
 			//add( BOOST_TEST_CASE( &test_sim ) );
-			//add( BOOST_TEST_CASE( &test_fc ) );
+			add( BOOST_TEST_CASE( &test_fc ) );
 			//add( BOOST_TEST_CASE( &test_loc ) );
-			add( BOOST_TEST_CASE( &test_tdf ) );
+			//add( BOOST_TEST_CASE( &test_tdf ) );
 
 		}
 	};

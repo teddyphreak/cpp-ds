@@ -334,7 +334,7 @@ namespace ds_lg {
 		T o; 						//!< node output
 		bool endpoint;				//!< true if this node is an endpoint
 		std::string type;			//!< node type
-		T* p;						//!< pointer to the observed simulation value. By default it poits to o.
+		T* p;						//!< pointer to the observed simulation value. By default it points to o.
 		monitor_container monitors;	//!< monitor container
 		Resolver<V>* resolver;		//!< resolver for hook execution
 		/*!
@@ -464,7 +464,7 @@ namespace ds_lg {
 		/*!
 		 * Default values: this node is an endpoint and its type is initialized to "output"
 		 */
-		Output():LogicNode("output"){ endpoint = true;};
+		Output():LogicNode("output"),a(0){ endpoint = true;};
 		/*!
 		 * Allocate new Output instance according to the prototype pattern
 		 * @return
@@ -566,7 +566,7 @@ namespace ds_lg {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		LGNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):LogicNode(t), A(AA){};
+		LGNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):LogicNode(t), a(0), A(AA){};
 		/*!
 		 * Allocate new LGNode1I instance according to the prototype pattern
 		 * @return
@@ -592,6 +592,7 @@ namespace ds_lg {
 		 * Calculate output value by evaluating simulation function with 2 inputs
 		 */
 		virtual void sim() {
+			//std::s << "a: " << std::hex << a << " b: " << b << std::endl;
 			o = (*A)(a,b);
 			return;
 		}
@@ -604,7 +605,7 @@ namespace ds_lg {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		LGNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):LogicNode(t), A(AA){};
+		LGNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):LogicNode(t),a(0),b(0),A(AA){};
 		/*!
 		 * Allocate new LGNode2I instance according to the prototype pattern
 		 * @return
@@ -643,7 +644,7 @@ namespace ds_lg {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		LGNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):LogicNode(t), A(AA){};
+		LGNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):LogicNode(t),a(0),b(0),c(0),A(AA){};
 		/*!
 		 * Allocate new LGNode3I instance according to the prototype pattern
 		 * @return

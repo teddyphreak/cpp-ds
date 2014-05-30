@@ -709,6 +709,9 @@ namespace ds_structural {
 		 */
 		template <class V, class T>
 		void drive(PortBit*pb, T *driver, std::map<Gate*,V*>& node_map);
+
+		template <class N, class T>
+		void fix(Signal*s, T *driver, std::map<Gate*,N*>& node_map, std::set<N*>& fixed_nodes);
 	};
 
 	void save_netlist(const std::string& file, ds_structural::NetList *nl);
