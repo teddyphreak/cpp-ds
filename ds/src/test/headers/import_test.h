@@ -46,7 +46,7 @@ namespace import_test {
 //	    	chains_to_test.push_back( "p295k.chain_info" );
 //	    	chains_to_test.push_back( "p330k.chain_info" );
 
-			sdf_to_test.push_back( "p45k_nan.sdf" );
+			sdf_to_test.push_back( "p45k_nan" );
 
 			add( BOOST_PARAM_TEST_CASE( &import_sdf, sdf_to_test.begin(), sdf_to_test.end() ) );
 

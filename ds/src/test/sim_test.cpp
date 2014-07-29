@@ -73,6 +73,62 @@ void sim_test::test_loc(){
 //	lg_loc_test("p330k_nan_sff.v", "p330k_nan_patterns.wgl", "top");
 };
 
+void sim_test::test_timing(){
+	BOOST_LOG_TRIVIAL(info) << "LOC Test";
+	fc_timing_test("p45k_nan_sff.v", "p45k_nan_patterns.wgl", "top", "p45k_nan_sff.sdf");
+}
+
+void sim_test::fc_timing_test(const std::string& design, const std::string& wgl_file, const std::string& top, const std::string& sdf_file){
+	try {
+		ds_library::Library *lib = ds_library::load_default_lib();
+		const char* d = getenv("DS");
+		std::string path = d?d:"";
+		std::string sdf_file_path = path + "/files/" + sdf_file;
+		BOOST_LOG_TRIVIAL(info) << "Importing " << sdf_file_path;
+		ds_timing::sdf_data data;
+		bool p = ds_timing::parse_sdf(sdf_file_path, data);
+
+		std::string design_file = path + "/files/" + design;
+		BOOST_LOG_TRIVIAL(info) << "Importing design file: " << design_file;
+		ds_structural::NetList *nl = ds_workspace::load_netlist(top, design_file);
+		nl->define_clock("clk");
+		ds_timing::TLeveledGraph* lg = nl->get_ts_graph(lib);
+		ds_timing::annotate(data, lg);
+
+		std::string wgl_file_path = path + "/files/" + wgl_file;
+		BOOST_LOG_TRIVIAL(info) << "Importing pattern file: " << wgl_file_path;
+		ds_pattern::SequentialPatternProvider* provider = ds_pattern::load_loc_blocks(wgl_file_path);
+
+		lg->adapt(provider);
+
+		while (provider->has_next()){
+
+			ds_pattern::SimPatternBlock *block = provider->next();
+
+			lg->sim(block);
+
+			for (ds_timing::TOutput *o: lg->outputs){
+
+				for (std::size_t idx=0;idx<64;idx++){
+					std::cout << "OUTPUT " << o->get_name() << ": " << idx << " " << o->get_delay(idx) << std::endl;
+				}
+
+			}
+
+			break;
+
+
+		}
+
+	} catch (boost::exception& e){
+
+		if( std::string *mi = boost::get_error_info<ds_common::errmsg_info>(e) ){
+			BOOST_LOG_TRIVIAL(error) << *mi;
+			std::cerr << "Error: " << *mi;
+		}
+	}
+}
+
 void sim_test::fc_test(const std::string& design, const std::string& wgl_file, const std::string& top){
 	ds_library::Library *lib = ds_library::load_default_lib();
 	const char* d = getenv("DS");

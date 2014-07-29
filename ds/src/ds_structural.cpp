@@ -572,9 +572,6 @@ void ds_structural::NetList::build_leveled_graph(ds_lg::GenericLeveledGraph<N,R,
 
 	BOOST_LOG_TRIVIAL(trace) << "11";
 
-	//set up intermediate simulation vectors
-	builder->create_simulation_level(max_level+1);
-
 	// count nodes per level
 	for (int i=0;i<max_level+1;i++){
 		auto cIt = builder->get_level_iterator(i);

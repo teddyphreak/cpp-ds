@@ -26,7 +26,7 @@ void import_test::import_netlist(const std::string& name) {
 
 		std::string file = path + "/files/" + name;
 		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
-		nl = ds_workspace::load_netlist("cpu_ip", file);
+		nl = ds_workspace::load_netlist("top", file);
 		BOOST_ASSERT(nl!=0);
 		BOOST_CHECK(nl->check_netlist());
 		ds_lg::LeveledGraph* lg = nl->get_sim_graph(lib);
@@ -50,12 +50,19 @@ void import_test::import_sdf(const std::string& name) {
 		BOOST_LOG_TRIVIAL(warning) << "Environmental variable DS not set";
 	}
 	std::string path = d?d:"";
+	ds_library::Library *lib = ds_library::load_default_lib();
 	try {
 
-		std::string file = path + "/files/" + name;
-		BOOST_LOG_TRIVIAL(info) << "Importing " << file;
+		std::string sdf_file = path + "/files/" + name + ".sdf";
+		BOOST_LOG_TRIVIAL(info) << "Importing " << sdf_file;
 		ds_timing::sdf_data data;
-		bool p = ds_timing::parse_sdf(file, data);
+		bool p = ds_timing::parse_sdf(sdf_file, data);
+
+		std::string design_file = path + "/files/" + name + ".v";
+		ds_structural::NetList *nl = ds_workspace::load_netlist("top", design_file);
+		ds_timing::TLeveledGraph* lg = nl->get_ts_graph(lib);
+		ds_timing::annotate(data, lg);
+
 		BOOST_CHECK(p);
 
 	} catch (boost::exception& e){

@@ -13,6 +13,8 @@
 #include "ds_pattern.h"
 #include <vector>
 #include <unordered_map>
+#include <queue>
+#include <algorithm>
 #include <boost/log/trivial.hpp>
 #include <boost/array.hpp>
 
@@ -1041,6 +1043,13 @@ namespace ds_lg {
 		}
 	};
 
+	template<class T> class NodeLevelComparator {
+	public:
+	    bool operator()(T n1, T n2){
+	    	return n1->level > n2->level;
+	    }
+	};
+
 	/*!
 	 * Generic leveled graph. This is the base class for any levelized graph with arbitrary data types:
 	 * N: Combinational primitive type
@@ -1089,15 +1098,6 @@ namespace ds_lg {
 		 */
 		virtual void set_levels(const int& l){
 			num_levels = l;
-		}
-		/*!
-		 * Sets up a container for each level
-		 * @param levels number of containers to create
-		 */
-		virtual void create_simulation_level(const std::size_t& levels){
-			for (std::size_t l=0;l<levels;l++){
-				simulation.push_back(new lg_node_container());
-			}
 		}
 		/*!
 		 * Convenience function to traverse all graph nodes
@@ -1265,7 +1265,7 @@ namespace ds_lg {
 		 * @param node node to include
 		 */
 		void push_node(N *node){
-			simulation[node->level]->push_back(node);
+			simulation.push(node);
 		}
 		/*!
 		 * Returns the check point of any given node:
@@ -1445,23 +1445,21 @@ namespace ds_lg {
 			/*!
 			 * Iterate all the levels and look for a node to evaluate
 			 */
-			for (int i=0;i<num_levels;i++){
-				lg_node_container* level = simulation[i];
-				iteration++;
-				for (auto it=level->begin();it!=level->end();it++){
-					N *n = *it;
-					// evaluate node
-					bool p = n->propagate(true);
-					if (p){
-						for (N *o : n->outputs){
-							// schedule the evaluation of the outputs outside the fault's current propagation path
-							auto s = set.find(o);
-							if (s==set.end()){
-								if (o->has_state())
-									regs.insert(o);		// schedule register for late
-								push_node(o);
-								set.insert(o);
-							}
+
+			while (simulation.size()!=0){
+				N *n = simulation.top();
+				simulation.pop();
+				// evaluate node
+				bool p = n->propagate(true);
+				if (p){
+					for (N *o : n->outputs){
+						// schedule the evaluation of the outputs outside the fault's current propagation path
+						auto s = set.find(o);
+						if (s==set.end()){
+							if (o->has_state())
+								regs.insert(o);		// schedule register for later
+							push_node(o);
+							set.insert(o);
 						}
 					}
 				}
@@ -1474,13 +1472,8 @@ namespace ds_lg {
 			}
 
 			//
-			for (int i=0;i<num_levels;i++){
-				lg_node_container* level = simulation[i];
-				for (auto it=level->begin();it!=level->end();it++){
-					N *n = *it;
-					n->rollback();
-				}
-				level->clear();
+			for (N* n:set){
+				n->rollback();
 			}
 		}
 		/*!
@@ -1488,19 +1481,25 @@ namespace ds_lg {
 		 */
 		virtual void initialize(){}
 
+		GenericLeveledGraph<N, R, I, O, V>(){}
+
 	protected:
 		int num_levels;										//!< number of levels in the graph
 		ds_pattern::SimPatternBlock *pattern_block; 		//!< current pattern block for simulation
 		std::vector<lg_node_iterator> levels;				//!< level iterators. Two iterators define the nodes in a level
-		std::vector<lg_node_container*> simulation;			//!< nodes to evaluate during intermediate simulation
 		std::vector<unsigned int> level_width;				//!< number of nodes per level
 		V constant_0;
 		V constant_1;										// constant primitive values
 		V constant_X;
 		ds_structural::NetList *nl;							//!< parent netlist
-		std::unordered_map<std::string, N*> registry;			//!< node map indexed by node instance name
-		std::unordered_map<std::string, R*> reg_registry;			//!< node map indexed by node instance name
+		std::unordered_map<std::string, N*> registry;		//!< node map indexed by node instance name
+		std::unordered_map<std::string, R*> reg_registry;	//!< node map indexed by node instance name
 		double iteration;
+
+		bool operator()(N* a, N* b){return a->level > b->level;};
+		std::priority_queue<N*, std::vector<N*>, NodeLevelComparator<N*> > simulation;						//!< nodes to evaluate during intermediate simulation
+
+
 		/*!
 		 * Evaluates the difference between primitive values. Used to compare
 		 * the fault-free and faulty simulation values
@@ -1531,10 +1530,9 @@ namespace ds_lg {
 	};
 
 	class LeveledGraph : public GenericLeveledGraph<LogicNode,LogicState,Input,Output,lg_v64>{
-		typedef std::vector<LogicNode*> lg_node_container;
 	public:
 
-		LeveledGraph(){
+		LeveledGraph():GenericLeveledGraph<LogicNode,LogicState,Input,Output,lg_v64>(){
 			constant_0 = lg_v64(0L,0L);
 			constant_1 = lg_v64(-1L,0L);
 			constant_X = lg_v64(0L,-1L);
@@ -2142,7 +2140,7 @@ namespace ds_lg {
 
 	public:
 
-		TLeveledGraph():vector_offset(0){
+		TLeveledGraph():GenericLeveledGraph<TNode,TState,TInput,TOutput,driver_v64>(),vector_offset(0){
 			constant_0 = lg_v64(0L,0L);
 			constant_1 = lg_v64(-1L,0L);
 			constant_X = lg_v64(0L,-1L);

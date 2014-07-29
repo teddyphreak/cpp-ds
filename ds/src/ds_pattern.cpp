@@ -8,7 +8,6 @@
 #include "ds_pattern.h"
 #include <fstream>
 #include "ds_common.h"
-#include "ds_common.h"
 #include <boost/exception/all.hpp>
 #include <boost/spirit/include/support_istream_iterator.hpp>
 #include <boost/log/trivial.hpp>

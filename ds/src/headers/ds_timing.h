@@ -12,6 +12,7 @@
 #include "ds_lg.h"
 #include <array>
 #include <map>
+#include <sstream>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix_core.hpp>
@@ -33,8 +34,7 @@ namespace ds_timing {
 
 	class Delay {
 	public:
-		virtual void execute();
-		void set_spec(const std::size_t& s);
+		virtual void execute()=0;
 	};
 
 	class TNode;
@@ -137,6 +137,10 @@ namespace ds_timing {
 			o.value = lg_v64(0L,-1L);
 			o.driver = this;
 			o.port_id = 0;
+			delay_o = 0;
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				o_ts[idx] = 0;
+			}
 		}
 		/*!
 		 * revert output to previous value
@@ -144,6 +148,8 @@ namespace ds_timing {
 		virtual void rollback(){
 			o.value = bo;
 		}
+
+		std::string get_t(const int i){return "";}
 		/*!
 		 * save the output value of the base simulation
 		 */
@@ -192,6 +198,7 @@ namespace ds_timing {
 			observe();
 			if (!endpoint){
 				ds_common::int64 result = ~o.value.x & (o.value.v ^ bo.v);
+				//std::cout << get_name() << ":" << o_ts[0] << std::endl;
 				return  result != 0;
 			}
 			return false;
@@ -217,15 +224,17 @@ namespace ds_timing {
 			return 0;
 		}
 
-		virtual void calculate_transitions(ds_workspace::Workspace *workspace);
-		virtual v64_ts* get_transition_input(const std::size_t& index){return 0;};
-		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled){}
-		virtual void get_latest_transition(){}
+		void calculate_transitions(ds_workspace::Workspace *workspace);
+		virtual v64_ts* get_transition_input(const std::size_t& index)=0;
+		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled)=0;
+		virtual void get_latest_transition()=0;
+		virtual void set_timing(v64_ts* primitive, Delay* delay)=0;
+		std::array<double, ds_common::WIDTH> o_ts;
 
 	protected:
 		lg_v64 bo;						//!< backup node output
 		lg_v64 previous;
-		std::array<double, ds_common::WIDTH> o_ts;
+
 		Delay *delay_o;
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
@@ -263,8 +272,14 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = a->value;
-			delay_a->execute();
-			delay_o->execute();
+			if (delay_a!=0)
+				delay_a->execute();
+			if (delay_o!=0)
+				delay_o->execute();
+		}
+
+		double get_delay(const std::size_t& idx){
+			return o_ts[idx];
 		}
 		/*!
 		 * simulation value is forwarded form input to output. Faults are injected
@@ -273,7 +288,12 @@ namespace ds_timing {
 		/*!
 		 * default values: this node is an endpoint and its type is initialized to "output"
 		 */
-		TOutput():TNode("output"){ endpoint = true;};
+		TOutput():TNode("output"),delay_a(0){
+			endpoint = true;
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				a_ts[idx] = 0;
+			}
+		};
 		/*!
 		 * allocate new Output instance according to the prototype pattern
 		 * @return
@@ -299,9 +319,13 @@ namespace ds_timing {
 			return 0;
 		}
 
-		virtual v64_ts* get_transition_input(const std::size_t& index){return 0;}
+		virtual v64_ts* get_transition_input(const std::size_t& index){return a;}
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled){}
 		virtual void get_latest_transition(){}
+		virtual void set_timing(v64_ts* primitive, Delay* delay){
+			if (primitive == a)
+				delay_a = delay;
+		}
 	};
 
 	/*!
@@ -331,7 +355,8 @@ namespace ds_timing {
 			std::size_t idx = offset + *vector_offset;
 			o.value.v = (*pb)->values[idx].v;
 			o.value.x = (*pb)->values[idx].x;
-			delay_o->execute();
+			if (delay_o!=0)
+				delay_o->execute();
 		}
 		/*!
 		 * simulation value is forwarded form input to output. Faults are injected
@@ -356,7 +381,7 @@ namespace ds_timing {
 		}
 		/*!
 		 * sets the address of a pattern block out of which this input is evaluated
-		 * @param pattern_block address of current pattern block to simulate
+		 * @param pattern_block address of current_condition pattern block to simulate
 		 */
 		void set_pattern_block(ds_pattern::SimPatternBlock** pattern_block){pb = pattern_block;}
 		/*!
@@ -377,6 +402,13 @@ namespace ds_timing {
 		virtual v64_ts* get_transition_input(const std::size_t& index){return 0;}
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled){}
 		virtual void get_latest_transition(){}
+
+		virtual void set_timing(v64_ts* primitive, Delay* delay){
+			if (primitive == &o)
+				delay_o = delay;
+			else
+				std::cout << "ERROR " << get_name() << " != " << primitive->driver->get_name() << std::endl;
+		}
 	};
 
 	/*!
@@ -394,8 +426,10 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value);
-			delay_a->execute();
-			delay_o->execute();
+			if (delay_a!=0)
+				delay_a->execute();
+			if (delay_o!=0)
+				delay_o->execute();
 		}
 		/*!
 		 * calculate output value by evaluating simulation function with 1 input. Faults are injected
@@ -406,7 +440,12 @@ namespace ds_timing {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		TNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):TNode(t), A(AA){};
+		TNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):TNode(t), A(AA), delay_a(0){
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				a_ts[idx] = 0;
+				o_ts[idx] = 0;
+			}
+		};
 		/*!
 		 * allocate new LGNode1I instance according to the prototype pattern
 		 * @return
@@ -428,10 +467,15 @@ namespace ds_timing {
 			}
 			return 0;
 		}
-		virtual void calculate_transitions(ds_workspace::Workspace *workspace){}
 		virtual v64_ts* get_transition_input(const std::size_t& index){return a;}
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled){}
 		virtual void get_latest_transition(){}
+		virtual void set_timing(v64_ts* primitive, Delay* delay){
+			if (primitive == a)
+				delay_a = delay;
+			if (primitive == &o)
+				delay_o = delay;
+		}
 
 	};
 	/*!
@@ -453,10 +497,18 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value,&b->value);
-			delay_a->execute();
-			delay_b->execute();
-			delay_o->execute();
+			if (delay_a!=0)
+				delay_a->execute();
+			if (delay_b!=0)
+				delay_b->execute();
+			if (delay_o!=0)
+				delay_o->execute();
 			return;
+		}
+		std::string get_t(const int i){
+			std::ostringstream s;
+			s << a_ts[i] << ":" << b_ts[i] << ":" << o_ts[i];
+			return s.str();
 		}
 		/*!
 		 * calculate output value by evaluating simulation function with 2 inputs. Faults may be injected
@@ -467,7 +519,13 @@ namespace ds_timing {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		TNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):TNode(t), A(AA){};
+		TNode2I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc)):TNode(t), A(AA), delay_a(0), delay_b(0){
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				a_ts[idx] = 0;
+				b_ts[idx] = 0;
+				o_ts[idx] = 0;
+			}
+		};
 		/*!
 		 * allocate new LGNode2I instance according to the prototype pattern
 		 * @return
@@ -492,8 +550,19 @@ namespace ds_timing {
 			}
 			return 0;
 		}
+		virtual v64_ts* get_transition_input(const std::size_t& index);
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled);
 		virtual void get_latest_transition();
+		virtual void set_timing(v64_ts* primitive, Delay* delay){
+			if (primitive == a)
+				delay_a = delay;
+			else if (primitive == b)
+				delay_b = delay;
+			else if (primitive == &o)
+				delay_o = delay;
+			else
+				std::cout << "ERROR " << get_name() << " != " << primitive << std::endl;
+		}
 	};
 	/*!
 	 * Simulation primitive for 3-input gates
@@ -518,10 +587,14 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value,&b->value,&c->value);
-			delay_a->execute();
-			delay_b->execute();
-			delay_c->execute();
-			delay_o->execute();
+			if (delay_a!=0)
+				delay_a->execute();
+			if (delay_b!=0)
+				delay_b->execute();
+			if (delay_c!=0)
+				delay_c->execute();
+			if (delay_o!=0)
+				delay_o->execute();
 		}
 		/*!
 		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
@@ -532,7 +605,14 @@ namespace ds_timing {
 		 * @param t gate type
 		 * @param AA simulation function
 		 */
-		TNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):TNode(t), A(AA){};
+		TNode3I(const std::string& t, lg_v64 (*AA)(val64_cpc, val64_cpc, val64_cpc c)):TNode(t), A(AA), delay_a(0), delay_b(0), delay_c(0){
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				a_ts[idx] = 0;
+				b_ts[idx] = 0;
+				c_ts[idx] = 0;
+				o_ts[idx] = 0;
+			}
+		};
 		/*!
 		 * allocate new LGNode3I instance according to the prototype pattern
 		 * @return
@@ -561,11 +641,19 @@ namespace ds_timing {
 			return 0;
 		}
 
-		virtual v64_ts* get_transition_input(const std::size_t& index){
-			return transitions[index];
+		virtual v64_ts* get_transition_input(const std::size_t& index);
+		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled);
+		virtual void get_latest_transition();
+		virtual void set_timing(v64_ts* primitive, Delay* delay){
+			if (primitive == a)
+				delay_a = delay;
+			if (primitive == b)
+				delay_b = delay;
+			if (primitive == c)
+				delay_c = delay;
+			if (primitive == &o)
+				delay_o = delay;
 		}
-
-		void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled);
 	};
 
 	class TState : public TNode {
@@ -608,6 +696,19 @@ namespace ds_timing {
 			output_array[1] = &previous_n;
 			endpoint = true;
 			p = &d.o;
+			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
+				d_ts[idx] = 0;
+				o_n_ts[idx] = 0;
+				cd_ts[idx] = 0;
+				cd_ts[idx] = 0;
+				rst_ts[idx] = 0;
+				rst_n_ts[idx] = 0;
+				load_ts[idx] = 0;
+				si_ts[idx] = 0;
+				se_ts[idx] = 0;
+				o_ts[idx] = 0;
+
+			}
 		}
 
 		/*!
@@ -730,6 +831,11 @@ namespace ds_timing {
 			}
 			return 0;
 		}
+
+		virtual v64_ts* get_transition_input(const std::size_t& index){return *d.get_input("a");};
+		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled){};
+		virtual void get_latest_transition(){};
+		virtual void set_timing(v64_ts* primitive, Delay* delay){}
 
 	};
 
@@ -866,6 +972,28 @@ namespace ds_timing {
 		}
 	};
 
+	class TOutputObserver : public ds_lg::Monitor<v64_ts> {
+	public:
+		std::size_t offset;					//!< output offset in the pattern block
+		ds_pattern::SimPatternBlock** pb;	//!< simulation pattern block
+		std::size_t *voffset;
+		/*!
+		 * initializes public members
+		 * @param output_offset offset
+		 * @param pattern_block target pattern block
+		 */
+		TOutputObserver(std::size_t output_offset, ds_pattern::SimPatternBlock** pattern_block, std::size_t *vector_offset):offset(output_offset), pb(pattern_block), voffset(vector_offset){}
+		/*!
+		 * write the simulation value at the output's offset in the pattern block
+		 * @param v simulation value
+		 */
+		virtual void observe(const v64_ts& v) {
+			int o = *voffset + offset;
+			(*pb)->values[o].v = v.value.v;
+			(*pb)->values[o].x = v.value.x;
+		}
+	};
+
 
 	struct sdf_header {
 		std::string sdf_version;
@@ -929,10 +1057,30 @@ namespace ds_timing {
 		std::vector<absolute> specs;
 	};
 
+	struct port_condition {
+		std::vector<bool_condition> conditions;
+		sdf_port_spec port;
+	};
+
+	struct check_static {
+		std::string type;
+		std::vector<sdf_port_spec> ports;
+		del_val del;
+	};
+
+	struct check_conditional {
+		std::string type;
+		sdf_port_spec port;
+		port_condition condition;
+		del_val del;
+	};
+
 	struct sdf_cell {
 		std::string cell_type;
 		sdf_instance instance;
 		std::vector<sdf_delay> sdf_spec;
+		std::vector<check_static> static_checks;
+		std::vector<check_conditional> conditional_checks;
 
 	};
 
@@ -1009,6 +1157,27 @@ BOOST_FUSION_ADAPT_STRUCT(
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
+	ds_timing::port_condition,
+	(std::vector<ds_timing::bool_condition>, conditions)
+	(ds_timing::sdf_port_spec, port)
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+	ds_timing::check_static,
+	(std::string, type)
+	(std::vector<ds_timing::sdf_port_spec>, ports)
+	(ds_timing::del_val, del)
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+	ds_timing::check_conditional,
+	(std::string, type)
+	(ds_timing::sdf_port_spec, port)
+	(ds_timing::port_condition, condition)
+	(ds_timing::del_val, del)
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
 	ds_timing::sdf_delay,
 	(std::vector<ds_timing::absolute>, specs)
 )
@@ -1018,6 +1187,8 @@ BOOST_FUSION_ADAPT_STRUCT(
 	(std::string, cell_type)
 	(ds_timing::sdf_instance, instance)
 	(std::vector<ds_timing::sdf_delay>, sdf_spec)
+	(std::vector<ds_timing::check_static>, static_checks)
+	(std::vector<ds_timing::check_conditional>, conditional_checks)
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -1091,10 +1262,18 @@ namespace ds_timing {
 
 			delay = lit("(") >> lit("DELAY") >> +abs >> lit(")");
 
+			timing_static = lit("(") >> name >> *input_spec >> val >> lit(")");
+
+			timing_port = lit("(") >> bool_c[push_back(at_c<0>(_val), _1)] % "&&" >> input_spec >> lit(")");
+
+			timing_conditional = lit("(") >> name >> input_spec >> timing_port >> val >> lit(")");
+
 			cell = lit("(") >> lit("CELL")
 				   >> lit("(") >> lit("CELLTYPE") >> qname[at_c<0>(_val)=_1] >> lit(")")
 				   >> instance[at_c<1>(_val)=_1]
-				   >> +delay[push_back(at_c<2>(_val), _1)] >>  lit(")");
+				   >> +delay[push_back(at_c<2>(_val), _1)]
+				   >> *timing_static[push_back(at_c<3>(_val), _1)]
+				   >> *timing_conditional[push_back(at_c<4>(_val), _1)] >>  lit(")");
 
 			name.name("name");
 			start.name("start");
@@ -1110,6 +1289,9 @@ namespace ds_timing {
 			cell.name("cell");
 			bool_c.name("boolean");
 			cond.name("cond");
+			timing_static.name("timing_static");
+			timing_conditional.name("timing_conditional");
+			timing_port.name("timing_port");
 //			debug(name);
 //			debug(start);
 //			debug(header);
@@ -1124,6 +1306,9 @@ namespace ds_timing {
 //			debug(cell);
 //			debug(bool_c);
 //			debug(cond);
+//			debug(timing_static);
+//			debug(timing_conditional);
+//			debug(timing_port);
 		}
 
 		qi::rule<Iterator, std::string()> qname;
@@ -1140,11 +1325,16 @@ namespace ds_timing {
 		qi::rule<Iterator, sdf_delay(), ascii::space_type> delay;
 		qi::rule<Iterator, absolute(), ascii::space_type> abs;
 		qi::rule<Iterator, del_def(), ascii::space_type> def;
+		qi::rule<Iterator, port_condition(), ascii::space_type> timing_port;
+		qi::rule<Iterator, check_static(), ascii::space_type> timing_static;
+		qi::rule<Iterator, check_conditional(), ascii::space_type> timing_conditional;
 		qi::rule<Iterator, sdf_cell(), ascii::space_type> cell;
 
 	};
 
 	bool parse_sdf(const std::string& file, ds_timing::sdf_data& sdf);
+
+	void annotate(const ds_timing::sdf_data& sdf, TLeveledGraph *graph);
 
 	typedef std::array<double, 3> delay_spec;
 
@@ -1155,10 +1345,13 @@ namespace ds_timing {
 		std::array<double, ds_common::WIDTH> *driver_ts;
 		std::array<double, ds_common::WIDTH> *port_ts;
 		double var_abs;
+		TNode *r;
+		TNode *d;
 
 	public:
-		InterconnectDelay(v64_ts* source, v64_ts* sink, TNode *node, const del_val& delay):spec(1), var_abs(0.0){
+		InterconnectDelay(v64_ts* source, v64_ts* sink, TNode *node, const del_val& delay):spec(1), var_abs(0.0),r(node){
 			driver_ts = source->driver->get_delay(source);
+			d = source->driver;
 			port_ts = node->get_delay(sink);
 			delay_values[0] = delay.min;
 			delay_values[1] = delay.mean;
@@ -1169,6 +1362,9 @@ namespace ds_timing {
 			double *target = port_ts->data();
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
 				target[index] = driver_ts->at(index) + delay_values[spec] + var_abs;
+				if (index==0){
+					std::cout << "Timing Interconnect: " << d->get_name() << "->" << r->get_name() << " " << driver_ts->at(index) << " " << delay_values[spec] << "|" << target[index] << std::endl;
+				}
 			}
 		}
 
@@ -1215,21 +1411,152 @@ namespace ds_timing {
 			ds_common::int64 zeros = ~val->v & ~val->x;
 			n->calculate_transitions(workspace);
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
+
 				v64_ts* in = n->get_transition_input(index);
+				if (index==0){
+					std::cout << "Timing IOPath transition input: " << index << " " << in->driver->o_ts[index] << "  " << in->ts[index] << std::endl;
+				}
 				double del = in->ts[index];
+				if (index==0){
+					std::cout << "Timing IOPath: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
+				}
 				if (((ones >> index) & 0x01L) != 0x0L){
 					del += rising[in][spec];
+					if (index==0){
+						std::cout << "Timing IOPath rising: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
+					}
 				}
 				if (((zeros >> index) & 0x01L) != 0x0L){
 					del += falling[in][spec];
+					if (index==0){
+						std::cout << "Timing IOPath falling: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
+					}
 				}
-				o_ts->data()[index] = del;
+				o_ts->data()[index] = del + var_abs;
+				if (index==0){
+					std::cout << "Timing IOPath: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << o_ts->data()[index] << std::endl;
+				}
+			}
+		}
+	};
+
+	class Condition {
+	public:
+		virtual ds_common::int64 evaluate()=0;
+		virtual double get_delay(const std::size_t index, const std::size_t& spec)const=0;
+	};
+
+	class ConditionList : public Condition{
+
+		std::vector<lg_v64> rhs;
+		std::vector<v64_ts*> lhs;
+		std::size_t size;
+
+		v64_ts* input;
+		delay_spec rising_delay;
+		delay_spec falling_delay;
+		std::array<double, ds_common::WIDTH> delay;
+		v64_ts *output;
+
+	public:
+
+		ConditionList(v64_ts* in, v64_ts* out):size(0), input(in), output(out){}
+
+		void add_condition(const lg_v64& r, v64_ts* l){
+			rhs.push_back(r);
+			lhs.push_back(l);
+			size++;
+		}
+
+		void set_rising_delay(const del_val& delay){
+			rising_delay[0] = delay.min;
+			rising_delay[1] = delay.mean;
+			rising_delay[2] = delay.max;
+		}
+
+		void set_falling_delay(const del_val& delay){
+			falling_delay[0] = delay.min;
+			falling_delay[1] = delay.mean;
+			falling_delay[2] = delay.max;
+		}
+
+		virtual ds_common::int64 evaluate(){
+			ds_common::int64 val = -1L;
+			for (std::size_t index=0;index<size;index++){
+				ds_common::int64 temp = (rhs[index].x ^ lhs[index]->value.x) || (rhs[index].v ^ lhs[index]->value.v);
+				val &= temp;
+			}
+			return val;
+		}
+
+		virtual double get_delay(const std::size_t index, const std::size_t& spec)const{
+			if (((output->value.v >> index) & 0x01)!=0x0){
+				return input->ts[index] + rising_delay[spec];
+			} else {
+				return input->ts[index] + rising_delay[spec];
 			}
 		}
 
-
 	};
 
+	class ConditionDelay: public Delay {
+		std::size_t spec;
+		double var_abs;
+		std::array<double, ds_common::WIDTH> *o_ts;
+		std::vector<Condition*> conditions;
+
+	public:
+		ConditionDelay(TNode *node, v64_ts* driver):spec(1), var_abs(0.0){
+			o_ts = node->get_delay(driver);
+		}
+		void add_condition_list(Condition *cl){
+			conditions.push_back(cl);
+		}
+
+		virtual void execute(){
+			for (auto cl_it=conditions.begin();cl_it!=conditions.end();cl_it++){
+				Condition *c = *cl_it;
+				ds_common::int64 satisfied = c->evaluate();
+				for (std::size_t index=0;index<ds_common::WIDTH;index++){
+					if (((satisfied >> index) & 0x01)!=0x0){
+						double new_delay = c->get_delay(index, spec);
+						double current_delay = o_ts->at(index);
+						if (new_delay > current_delay){
+							o_ts->data()[index] = new_delay;
+						}
+					}
+				}
+			}
+		}
+	};
+
+	struct delay_visitor : boost::static_visitor<void> {
+		delay_visitor(TLeveledGraph *g);
+		void set_instance_name(const std::string& name){
+			instance_name=name;
+			condition_delays.clear();
+			path_delays.clear();
+		}
+		void set_cell_type(const std::string& type){
+			cell_type = type;
+		}
+		void set_timing();
+		void operator()(const sdf_interconnect& instance);
+		void operator()(const sdf_iopath& instance);
+		void operator()(const sdf_cond& instance);
+
+	private:
+		TLeveledGraph *lg;
+		std::string instance_name;
+		ds_workspace::Workspace *wp;
+		std::unordered_map<ds_timing::v64_ts*, ds_timing::IOPathDelay*> path_delays;
+		std::unordered_map<ds_timing::v64_ts*, ds_timing::ConditionDelay*> condition_delays;
+		std::string cell_type;
+	};
+
+	std::string get_node_name(const std::string descriptor);
+	std::string get_port_name(const std::string descriptor);
+	bool is_port(const std::string descriptor);
 }
 
 
