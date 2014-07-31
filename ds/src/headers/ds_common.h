@@ -6,8 +6,11 @@
 
 namespace ds_common {
 
-	const int WIDTH = 64; 
+	// Word length for simulation
+	const int WIDTH = 64;
 	typedef unsigned long int64;
+
+	// Exceptions (not extensively or consistently used)
 	typedef boost::error_info<struct tag_errmsg, std::string> errmsg_info;
 	struct file_read_error: virtual boost::exception, virtual std::exception { };
 	struct parse_error: virtual boost::exception, virtual std::exception { };
@@ -45,6 +48,11 @@ namespace ds_common {
 			return o;
 		}
 
+		/*!
+		 * assignment operation
+		 * @param rhs right-hand-side value
+		 * @return a copy of the right-hand-side value
+		 */
 		lg_v64& operator=(const lg_v64 &rhs) {
 			if (this != &rhs) {
 				v = rhs.v;
@@ -123,6 +131,9 @@ namespace ds_common {
 		return lhs;
 	}
 	
+	/*!
+	 * Symbolic representations of simulation values (for parsing)
+	 */
 	enum Value {
 		BIT_0 = 0,
 		BIT_1,

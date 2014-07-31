@@ -139,7 +139,7 @@ namespace ds_timing {
 			o.port_id = 0;
 			delay_o = 0;
 			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
-				o_ts[idx] = 0;
+				o.ts[idx] = 0;
 			}
 		}
 		/*!
@@ -219,7 +219,7 @@ namespace ds_timing {
 
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 			if (port == &o){
-				return &o_ts;
+				return &o.ts;
 			}
 			return 0;
 		}
@@ -229,7 +229,6 @@ namespace ds_timing {
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled)=0;
 		virtual void get_latest_transition()=0;
 		virtual void set_timing(v64_ts* primitive, Delay* delay)=0;
-		std::array<double, ds_common::WIDTH> o_ts;
 
 	protected:
 		lg_v64 bo;						//!< backup node output
@@ -279,7 +278,7 @@ namespace ds_timing {
 		}
 
 		double get_delay(const std::size_t& idx){
-			return o_ts[idx];
+			return a->ts[idx];
 		}
 		/*!
 		 * simulation value is forwarded form input to output. Faults are injected
@@ -311,7 +310,7 @@ namespace ds_timing {
 
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 			if (port == &o){
-				return &o_ts;
+				return &o.ts;
 			}
 			if (port == a){
 				return &a_ts;
@@ -443,7 +442,7 @@ namespace ds_timing {
 		TNode1I(const std::string& t, lg_v64 (*AA)(val64_cpc)):TNode(t), A(AA), delay_a(0){
 			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
 				a_ts[idx] = 0;
-				o_ts[idx] = 0;
+				o.ts[idx] = 0;
 			}
 		};
 		/*!
@@ -460,7 +459,7 @@ namespace ds_timing {
 
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 			if (port == &o){
-				return &o_ts;
+				return &o.ts;
 			}
 			if (port == a){
 				return &a_ts;
@@ -507,7 +506,7 @@ namespace ds_timing {
 		}
 		std::string get_t(const int i){
 			std::ostringstream s;
-			s << a_ts[i] << ":" << b_ts[i] << ":" << o_ts[i];
+			s << a_ts[i] << ":" << b_ts[i] << ":" << o.ts[i];
 			return s.str();
 		}
 		/*!
@@ -523,7 +522,7 @@ namespace ds_timing {
 			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
 				a_ts[idx] = 0;
 				b_ts[idx] = 0;
-				o_ts[idx] = 0;
+				o.ts[idx] = 0;
 			}
 		};
 		/*!
@@ -540,7 +539,7 @@ namespace ds_timing {
 
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 			if (port == &o){
-				return &o_ts;
+				return &o.ts;
 			}
 			if (port == a){
 				return &a_ts;
@@ -610,7 +609,7 @@ namespace ds_timing {
 				a_ts[idx] = 0;
 				b_ts[idx] = 0;
 				c_ts[idx] = 0;
-				o_ts[idx] = 0;
+				o.ts[idx] = 0;
 			}
 		};
 		/*!
@@ -627,7 +626,7 @@ namespace ds_timing {
 
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 			if (port == &o){
-			return &o_ts;
+			return &o.ts;
 			}
 			if (port == a){
 				return &a_ts;
@@ -706,7 +705,7 @@ namespace ds_timing {
 				load_ts[idx] = 0;
 				si_ts[idx] = 0;
 				se_ts[idx] = 0;
-				o_ts[idx] = 0;
+				o.ts[idx] = 0;
 
 			}
 		}
@@ -800,13 +799,21 @@ namespace ds_timing {
 
 		TNode* get_sink() {return &d;}
 
+		v64_ts* get_default_data_input() {
+			return *(d.get_input("a"));
+		}
+
+		double get_default_input_delay(const std::size_t& index){
+			return (*d.get_input("a"))->ts[index];
+		}
+
 		virtual std::array<double, ds_common::WIDTH>* get_delay(const v64_ts *port){
 
 			if (port == &o){
-				return &o_ts;
+				return &o.ts;
 			}
 			if (port == &o_n){
-				return &o_n_ts;
+				return &o_n.ts;
 			}
 			if (port == *(d.get_input("a"))){
 				return &d_ts;
@@ -1361,10 +1368,10 @@ namespace ds_timing {
 		void execute(){
 			double *target = port_ts->data();
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
-				target[index] = driver_ts->at(index) + delay_values[spec] + var_abs;
 				if (index==0){
-					std::cout << "Timing Interconnect: " << d->get_name() << "->" << r->get_name() << " " << driver_ts->at(index) << " " << delay_values[spec] << "|" << target[index] << std::endl;
+					std::cout << "Timing Interconnect: " << d->get_name() << "->" << r->get_name() << " " << driver_ts->at(index) << " " << delay_values[spec] << std::endl;
 				}
+				target[index] = driver_ts->at(index) + delay_values[spec] + var_abs;
 			}
 		}
 
@@ -1413,13 +1420,10 @@ namespace ds_timing {
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
 
 				v64_ts* in = n->get_transition_input(index);
-				if (index==0){
-					std::cout << "Timing IOPath transition input: " << index << " " << in->driver->o_ts[index] << "  " << in->ts[index] << std::endl;
-				}
-				double del = in->ts[index];
-				if (index==0){
-					std::cout << "Timing IOPath: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
-				}
+				std::array<double, ds_common::WIDTH> *port_delay = n->get_delay(in);
+
+
+				double del = port_delay->at(index);
 				if (((ones >> index) & 0x01L) != 0x0L){
 					del += rising[in][spec];
 					if (index==0){

@@ -112,7 +112,14 @@ void sim_test::fc_timing_test(const std::string& design, const std::string& wgl_
 				for (std::size_t idx=0;idx<64;idx++){
 					std::cout << "OUTPUT " << o->get_name() << ": " << idx << " " << o->get_delay(idx) << std::endl;
 				}
+			}
 
+			for (ds_timing::TState *o: lg->registers){
+
+				for (std::size_t idx=0;idx<64;idx++){
+					double del = (o->get_delay(o->get_default_data_input()))->at(idx);
+					std::cout << "OUTPUT " << o->get_name() << ": " << idx << " " <<  del << "|" << o->get_default_input_delay(idx) << std::endl;
+				}
 			}
 
 			break;
