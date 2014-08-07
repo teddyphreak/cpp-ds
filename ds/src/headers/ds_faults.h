@@ -281,6 +281,11 @@ public:
 	}
 
 	virtual ~StuckAt(){}
+
+    std::string get_string() {
+        return this->get_gate_name() + "/" + this->get_port_name() + "/" + ((this->get_value() == ds_common::BIT_0) ? "0" : "1");
+    }
+	bool get_value() {return (this->value == ds_common::BIT_1);}
 };
 
 class TStuckAt : public StaticFault<ds_lg::TNode, ds_lg::driver_v64> {
@@ -317,85 +322,7 @@ public:
 		return ds_lg::lg_v64(0L,-1L);
 	}
 
-	std::string get_string(){
-		std::string s = node_name + "/" + node_port_name + "@";
-		if (value == ds_common::BIT_0)
-			return s + "0";
-		else if (value == ds_common::BIT_1)
-			return s + "1";
-		else
-			return s + "X";
-	}
-
 	virtual ~TStuckAt(){}
-};
-
-class TCondSA : public StaticFault<ds_lg::TNode, ds_lg::driver_v64> {
-	ds_common::Value value;		//!< stuck-at value
-	boost::random::mt19937& generator;
-	double threshold;
-public:
-	/*!
-	 * Constructs a new stuck-at fault for simulation. It adds a single observed node (also the victim node)
-	 * @param nl netlist where this fault is injected
-	 * @param g gate name
-	 * @param p port name
-	 * @param v stuck-at value. Behavior is undefined if 'X' is provided
-	 */
-	TCondSA(ds_structural::NetList* nl, std::string g, std::string p, ds_common::Value v, boost::random::mt19937& r, const double& t):
-		StaticFault<ds_lg::TNode, ds_lg::driver_v64>(nl, g, p), value(ds_common::BIT_X), generator(r), threshold(t){
-		if (v == ds_common::BIT_0){
-			value = ds_common::BIT_1;
-		} else if (v == ds_common::BIT_1)
-			value = ds_common::BIT_0;
-		add_condition(this,value);
-	}
-
-	virtual ds_lg::int64 compare(const  ds_lg::driver_v64* a, const  ds_lg::driver_v64& b) const{
-		ds_common::int64 v = a->value.v;
-		ds_common::int64 p = b.value.v;
-		return ~(v ^ p) ;
-	}
-
-	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
-		if (v==ds_common::BIT_0){
-			return ds_lg::lg_v64(0L,0L);
-		} else if (v==ds_common::BIT_1){
-			return ds_lg::lg_v64(-1L,0L);
-		}
-		return ds_lg::lg_v64(0L,-1L);
-	}
-
-	std::string get_string(){
-		std::string s = node_name + "/" + node_port_name + "@";
-		if (value == ds_common::BIT_0)
-			return s + "0";
-		else if (value == ds_common::BIT_1)
-			return s + "1";
-		else
-			return s + "X";
-	}
-
-	virtual ds_lg::int64 hook(ds_lg::Resolver<ds_lg::TNode>* res) const{
-		ds_lg::int64 active = -1L;
-		boost::random::uniform_real_distribution<> distribution(0.0,1.0);
-		for(std::size_t i=0;i<aggressors.size();i++){
-			ds_lg::driver_v64 *agg_value = ds_faults::resolve<ds_lg::TNode, ds_lg::driver_v64>(aggressors[i], res);
-			active &= compare(agg_value, polarity[i]);
-		}
-		ds_lg::int64 mask = 1L;
-		for (std::size_t i=0;i<ds_common::WIDTH;i++){
-			double r = distribution(generator);
-			if (r < threshold){
-				mask = mask << i;
-				ds_lg::int64 p = ~mask;
-				active &=p;
-			}
-		}
-		return active;
-	}
-
-	virtual ~TCondSA(){}
 };
 
 class TransitionFault: public StaticFault<ds_lg::TNode, ds_lg::driver_v64>{
@@ -528,7 +455,7 @@ enum FaultCategory {
 	PT,		//!< possibly detected
 	AP,		//!< ATPG untestable-possibly detected
 	NP,		//!< not analyzed-possibly detected
-	UD,		//!< undetectable
+	UD,		//!< undetected
 	UU,		//!< undetectable unused
 	UT,		//!< undetectable tied
 	UB,		//!< undetectable blocked
@@ -551,25 +478,28 @@ class FaultList {
 
 	/// probability of detecting a fault when the simulation value is X and the expected value is [0|1]
 	const double X_WEIGHT = 0.5;
-
+public:
 	std::set<SAFaultDescriptor*> uk; //!< unprocessed fault set
 	std::set<SAFaultDescriptor*> ds; //!< detected by simulation fault set
 	std::set<SAFaultDescriptor*> np; //!< probably detected fault set
 	std::set<SAFaultDescriptor*> ud; //!< undetected fault set
+	std::set<SAFaultDescriptor*> ur; //!< undetected fault set
 
 	/// maps all fault descriptors to its representative fault descriptor
 	std::map<std::string, SAFaultDescriptor*> representatives;
 	/// keeps track of the current category for each representative descriptor
 	std::map<SAFaultDescriptor*, FaultCategory> fault_map;
 
-public:
+
+    FaultList();
+    void add(SAFaultDescriptor* saf);
+    uint size();
+
 	/*!
 	 * generates equivalent fault categories and selects representatives faults for the provided netlist
 	 * @param nl netlist for which fault descriptors are generated
 	 */
 	FaultList(ds_structural::NetList* nl);
-
-	FaultList(){};
 
 	template<typename I>
 	FaultList(I begin, I end){
@@ -663,7 +593,7 @@ public:
 	 */
 	template<typename Container>
 	void get_undetected_faults(Container& container){
-		std::cout << "UK: " << uk.size() << "UD: " << ud.size() << std::endl;
+
 		typename Container::iterator it = container.begin();
 		std::insert_iterator<Container> insert_it(container, it);
 		std::copy(uk.begin(), uk.end(), insert_it);
@@ -756,14 +686,21 @@ class MFaultList {
 	std::unordered_map<std::string, MSAFault> mflst;
 
  public:
+    int cnt_rejected;
+    int cnt_total;
+
 	MFaultList();
 	MFaultList(ds_structural::NetList* nl, std::string filename);
 
 	bool load_MFL(ds_structural::NetList* nl, std::string filename);
+	bool store_MFL(std::string filename);
+    bool add(ds_faults::SAFaultDescriptor* saf, ds_faults::StuckAt* sa);
 	bool add(ds_structural::NetList* nl, std::string definition);
 
 	ds_faults::FaultList* get_faultlist();
-	MSAFault get_MF(std::string descriptor);
+	MSAFault get_MF(std::string fault_descriptor);      //get multiple fault (multiple sites)
+	std::string get_MF_str(std::string fault_descriptor);
+	uint get_count(std::string fault_descriptor);
 };
 
 

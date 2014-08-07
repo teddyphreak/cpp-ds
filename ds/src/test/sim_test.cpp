@@ -13,6 +13,7 @@
 #include "ds_lg.h"
 #include "ds_faults.h"
 #include "ds_simulation.h"
+#include "ds_timing.h"
 #include <boost/log/trivial.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
@@ -86,7 +87,12 @@ void sim_test::fc_timing_test(const std::string& design, const std::string& wgl_
 		std::string sdf_file_path = path + "/files/" + sdf_file;
 		BOOST_LOG_TRIVIAL(info) << "Importing " << sdf_file_path;
 		ds_timing::sdf_data data;
+
 		bool p = ds_timing::parse_sdf(sdf_file_path, data);
+
+		if (!p){
+			BOOST_LOG_TRIVIAL(warning) << "Error parsing " << sdf_file_path;
+		}
 
 		std::string design_file = path + "/files/" + design;
 		BOOST_LOG_TRIVIAL(info) << "Importing design file: " << design_file;
@@ -118,7 +124,7 @@ void sim_test::fc_timing_test(const std::string& design, const std::string& wgl_
 
 				for (std::size_t idx=0;idx<64;idx++){
 					double del = (o->get_delay(o->get_default_data_input()))->at(idx);
-					std::cout << "OUTPUT " << o->get_name() << ": " << idx << " " <<  del << "|" << o->get_default_input_delay(idx) << std::endl;
+					std::cout << "FF " << o->get_name() << ": " << idx << " " <<  del << "|" << o->get_default_input_delay(idx) << std::endl;
 				}
 			}
 

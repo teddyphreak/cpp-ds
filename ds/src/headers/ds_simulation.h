@@ -22,7 +22,7 @@ void run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_faults::FaultLis
 		ds_pattern::SequentialPatternProvider* provider);
 
 void run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::MFaultList* mfl,
-		ds_pattern::CombinationalPatternList& provider, ds_common::int64 *detected);
+				      ds_pattern::CombinationalPatternList& provider, std::map<ds_lg::LogicNode*, ds_lg::ErrorObserver*>& output_map, ds_common::int64 *detected);
 
 }
 

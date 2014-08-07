@@ -33,8 +33,8 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //	serialization_test::serialize_ts *serial = new serialization_test::serialize_ts("serialize_ts");
 //	test->add( serial );
 //
-//	sim_test::sim_ts *sim = new sim_test::sim_ts("sim_ts");
-//	test->add( sim );
+	sim_test::sim_ts *sim = new sim_test::sim_ts("sim_ts");
+	test->add( sim );
 //
 //	import_test::import_ts *import = new import_test::import_ts("import_ts");
 //	test->add( import );
@@ -48,8 +48,8 @@ boost::unit_test::test_suite* init_unit_test_suite( int argc, char* argv[] ) {
 //	trans_test::trans_ts *trans = new trans_test::trans_ts("trans_ts");
 //	test->add( trans );
 //
-	diagnosis_test::diagnosis_ts *diagnosis = new diagnosis_test::diagnosis_ts("diagnosis_ts");
-	test->add( diagnosis );
+//	diagnosis_test::diagnosis_ts *diagnosis = new diagnosis_test::diagnosis_ts("diagnosis_ts");
+//	test->add( diagnosis );
 
     return test;
 }

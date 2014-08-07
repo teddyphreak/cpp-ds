@@ -558,11 +558,11 @@ namespace ds_lg {
 		}
 	}
 
-	void ds_lg::LeveledGraph::attach_output_observers(ds_common::int64 *detected){
+	void ds_lg::LeveledGraph::attach_output_observers(ds_common::int64 *detected, ds_common::int64 *possibly_detected) {
 
 		for (auto it=outputs.begin(); it!=outputs.end();it++){
 			LogicNode *o = *it;
-			ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(detected, 0);
+			ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(detected, possibly_detected);
 			o->add_monitor(observer);
 		}
 	}

@@ -34,7 +34,7 @@ namespace ds_timing {
 
 	class Delay {
 	public:
-		virtual void execute()=0;
+		virtual void execute(const ds_common::int64& transitions)=0;
 	};
 
 	class TNode;
@@ -138,6 +138,7 @@ namespace ds_timing {
 			o.driver = this;
 			o.port_id = 0;
 			delay_o = 0;
+			timing = 0;
 			for (std::size_t idx=0;idx < ds_common::WIDTH;idx++){
 				o.ts[idx] = 0;
 			}
@@ -186,6 +187,7 @@ namespace ds_timing {
 		* @return true if an event is propagated to the output nodes
 		*/
 		virtual bool propagate(bool intermediate) {
+
 			if (intermediate){
 				if (hooks.size()!=0){
 					hook();		// handle hooks and calculate new values
@@ -196,9 +198,9 @@ namespace ds_timing {
 				sim();		// calculate new values
 			}
 			observe();
+
 			if (!endpoint){
 				ds_common::int64 result = ~o.value.x & (o.value.v ^ bo.v);
-				//std::cout << get_name() << ":" << o_ts[0] << std::endl;
 				return  result != 0;
 			}
 			return false;
@@ -224,6 +226,8 @@ namespace ds_timing {
 			return 0;
 		}
 
+		void set_timing_activation(bool *t){timing = t;}
+
 		void calculate_transitions(ds_workspace::Workspace *workspace);
 		virtual v64_ts* get_transition_input(const std::size_t& index)=0;
 		virtual void get_latest_transition(const ds_common::int64& controlling, const ds_common::int64& controlled)=0;
@@ -233,8 +237,8 @@ namespace ds_timing {
 	protected:
 		lg_v64 bo;						//!< backup node output
 		lg_v64 previous;
-
 		Delay *delay_o;
+		bool *timing;
 		/*!
 		 * Processes all hooks at the input ports. Commodity function
 		 */
@@ -271,10 +275,13 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = a->value;
-			if (delay_a!=0)
-				delay_a->execute();
-			if (delay_o!=0)
-				delay_o->execute();
+			if (*timing){
+				ds_common::int64 transitions = ~o.value.x & (o.value.v ^ previous.v);
+				if (delay_a!=0)
+					delay_a->execute(transitions);
+				if (delay_o!=0)
+					delay_o->execute(transitions);
+			}
 		}
 
 		double get_delay(const std::size_t& idx){
@@ -354,8 +361,12 @@ namespace ds_timing {
 			std::size_t idx = offset + *vector_offset;
 			o.value.v = (*pb)->values[idx].v;
 			o.value.x = (*pb)->values[idx].x;
-			if (delay_o!=0)
-				delay_o->execute();
+			if (*timing){
+				if (delay_o!=0){
+					ds_common::int64 transitions = ~o.value.x & (o.value.v ^ previous.v);
+					delay_o->execute(transitions);
+				}
+			}
 		}
 		/*!
 		 * simulation value is forwarded form input to output. Faults are injected
@@ -365,6 +376,12 @@ namespace ds_timing {
 		 * default values: this node is an endpoint and its type is initialized to "input"
 		 */
 		TInput():TNode("input"),vector_offset(0){};
+
+		void force_timing(double timestamp){
+			for (int i=0;i<ds_common::WIDTH;i++){
+				o.ts[i] = timestamp;
+			}
+		}
 		/*!
 		 * allocate new Input instance according to the prototype pattern
 		 * @return
@@ -425,10 +442,13 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value);
-			if (delay_a!=0)
-				delay_a->execute();
-			if (delay_o!=0)
-				delay_o->execute();
+			if (*timing){
+				ds_common::int64 transitions = ~o.value.x & (o.value.v ^ previous.v);
+				if (delay_a!=0)
+					delay_a->execute(transitions);
+				if (delay_o!=0)
+					delay_o->execute(transitions);
+			}
 		}
 		/*!
 		 * calculate output value by evaluating simulation function with 1 input. Faults are injected
@@ -496,12 +516,15 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value,&b->value);
-			if (delay_a!=0)
-				delay_a->execute();
-			if (delay_b!=0)
-				delay_b->execute();
-			if (delay_o!=0)
-				delay_o->execute();
+			if (*timing){
+				ds_common::int64 transitions = ~o.value.x & (o.value.v ^ previous.v);
+				if (delay_a!=0)
+					delay_a->execute(transitions);
+				if (delay_b!=0)
+					delay_b->execute(transitions);
+				if (delay_o!=0)
+					delay_o->execute(transitions);
+			}
 			return;
 		}
 		std::string get_t(const int i){
@@ -586,14 +609,17 @@ namespace ds_timing {
 		 */
 		virtual void sim() {
 			o.value = (*A)(&a->value,&b->value,&c->value);
-			if (delay_a!=0)
-				delay_a->execute();
-			if (delay_b!=0)
-				delay_b->execute();
-			if (delay_c!=0)
-				delay_c->execute();
-			if (delay_o!=0)
-				delay_o->execute();
+			if (*timing){
+				ds_common::int64 transitions = ~o.value.x & (o.value.v ^ previous.v);
+				if (delay_a!=0)
+					delay_a->execute(transitions);
+				if (delay_b!=0)
+					delay_b->execute(transitions);
+				if (delay_c!=0)
+					delay_c->execute(transitions);
+				if (delay_o!=0)
+					delay_o->execute(transitions);
+			}
 		}
 		/*!
 		 * calculate output value by evaluating simulation function with 3 inputs. Faults may be are injected
@@ -656,7 +682,7 @@ namespace ds_timing {
 	};
 
 	class TState : public TNode {
-	public:
+	protected:
 		TOutput d;
 		v64_ts * cd;	//!< clk input
 		v64_ts o_n;		//!< not Q output
@@ -685,6 +711,7 @@ namespace ds_timing {
 		boost::array<const lg_v64*,2> output_array;
 
 
+
 	public:
 		TState(const std::string& t):TNode(t), o_n(0,-1L,this,1), one(-1L,0,this,-1), zero(0,0,this,-1){
 			rst = &zero;
@@ -707,6 +734,13 @@ namespace ds_timing {
 				se_ts[idx] = 0;
 				o.ts[idx] = 0;
 
+			}
+		}
+
+		void force_timing(double timestamp){
+			for (int i=0;i<ds_common::WIDTH;i++){
+				o.ts[i] = timestamp;
+				o_n_ts[i] = timestamp;
 			}
 		}
 
@@ -875,6 +909,7 @@ namespace ds_timing {
 			constant_0 = lg_v64(0L,0L);
 			constant_1 = lg_v64(-1L,0L);
 			constant_X = lg_v64(0L,-1L);
+			timing = false;
 		}
 
 		virtual void initialize(){
@@ -886,10 +921,22 @@ namespace ds_timing {
 			}
 		}
 
+		void activate_timing(){
+			timing = true;
+		}
+
+		void deactivate_timing(){
+			timing = false;
+		}
+
 	protected:
 		std::vector<TNode*> combinational;
 
 		std::size_t vector_offset;
+
+		bool timing;
+
+		double cycle = 10.0;
 
 		lg_v64 resolve(const v64_ts& ff, const v64_ts& faulty) const {
 			ds_common::int64 diff = (ff.value.v ^ faulty.value.v) & ~ff.value.x;
@@ -897,6 +944,8 @@ namespace ds_timing {
 			lg_v64 ret(diff,x);
 			return ret;
 		}
+
+
 
 	public:
 
@@ -939,6 +988,7 @@ namespace ds_timing {
 			scan();
 
 			//propagates events from inputs to outputs --> LAUNCH
+			timing = false;
 			for (auto it=combinational.begin();it!=combinational.end();it++){
 				TNode *n = *it;
 				n->propagate(false);
@@ -951,7 +1001,16 @@ namespace ds_timing {
 				n->mark_clock_cycle();
 			}
 
+			timing = true;
 			clocks[0].tick();
+			for (auto it=registers.begin();it!=registers.end();it++){
+				TState *r = *it;
+				r->force_timing(cycle);
+			}
+			for (auto it=inputs.begin();it!=inputs.end();it++){
+				TInput *in = *it;
+				in->force_timing(cycle);
+			}
 
 			for (ds_lg::SimulationHook<TNode>* h: hooks){
 				TNode *node = h->get_hook_node(this);
@@ -959,6 +1018,8 @@ namespace ds_timing {
 			}
 
 			next_vector();
+
+			std::cout << "CAPUTURE !!!!!!!!!!!!!" << std::endl;
 			//propagates events from inputs to outputs --> CAPTURE
 			for (auto it=combinational.begin();it!=combinational.end();it++){
 				TNode *n = *it;
@@ -1365,12 +1426,14 @@ namespace ds_timing {
 			delay_values[2] = delay.max;
 		}
 
-		void execute(){
+		void execute(const ds_common::int64& transitions){
 			double *target = port_ts->data();
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
-				if (index==0){
-					std::cout << "Timing Interconnect: " << d->get_name() << "->" << r->get_name() << " " << driver_ts->at(index) << " " << delay_values[spec] << std::endl;
+
+				if (((transitions >> index) & 0x01)==0x0){
+					continue;
 				}
+
 				target[index] = driver_ts->at(index) + delay_values[spec] + var_abs;
 			}
 		}
@@ -1413,33 +1476,31 @@ namespace ds_timing {
 			falling[input] = s;
 		}
 
-		void execute(){
+		void execute(const ds_common::int64& transitions){
 			ds_common::int64 ones =   val->v & ~val->x;
 			ds_common::int64 zeros = ~val->v & ~val->x;
 			n->calculate_transitions(workspace);
 			for (std::size_t index=0;index<ds_common::WIDTH;index++){
+
+				if (((transitions >> index) & 0x01)==0x0){
+					continue;
+				}
 
 				v64_ts* in = n->get_transition_input(index);
 				std::array<double, ds_common::WIDTH> *port_delay = n->get_delay(in);
 
 
 				double del = port_delay->at(index);
+				double gate_delay = 0.0;
 				if (((ones >> index) & 0x01L) != 0x0L){
-					del += rising[in][spec];
-					if (index==0){
-						std::cout << "Timing IOPath rising: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
-					}
+					gate_delay = rising[in][spec];
 				}
 				if (((zeros >> index) & 0x01L) != 0x0L){
-					del += falling[in][spec];
-					if (index==0){
-						std::cout << "Timing IOPath falling: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << del << std::endl;
-					}
+					gate_delay= falling[in][spec];
 				}
+				del+=gate_delay;
+
 				o_ts->data()[index] = del + var_abs;
-				if (index==0){
-					std::cout << "Timing IOPath: " << n->get_name() << " "  << index << " " << n->get_t(index) << " :" << o_ts->data()[index] << std::endl;
-				}
 			}
 		}
 	};
@@ -1517,16 +1578,18 @@ namespace ds_timing {
 			conditions.push_back(cl);
 		}
 
-		virtual void execute(){
+		virtual void execute(const ds_common::int64& transitions){
 			for (auto cl_it=conditions.begin();cl_it!=conditions.end();cl_it++){
 				Condition *c = *cl_it;
 				ds_common::int64 satisfied = c->evaluate();
 				for (std::size_t index=0;index<ds_common::WIDTH;index++){
-					if (((satisfied >> index) & 0x01)!=0x0){
-						double new_delay = c->get_delay(index, spec);
-						double current_delay = o_ts->at(index);
-						if (new_delay > current_delay){
-							o_ts->data()[index] = new_delay;
+					if (((transitions >> index) & 0x01)!=0x0){
+						if (((satisfied >> index) & 0x01)!=0x0){
+							double new_delay = c->get_delay(index, spec);
+							double current_delay = o_ts->at(index);
+							if (new_delay > current_delay){
+								o_ts->data()[index] = new_delay;
+							}
 						}
 					}
 				}

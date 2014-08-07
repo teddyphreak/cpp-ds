@@ -13,6 +13,8 @@
 #include <fstream>
 #include <boost/log/trivial.hpp>
 
+
+
 bool ds_timing::parse_sdf(const std::string& file, ds_timing::sdf_data& sdf){
 
 	namespace spirit = boost::spirit;
@@ -190,10 +192,16 @@ void ds_timing::TLeveledGraph::setup(){
 		if (!n->has_state()){
 			temp.push_back(n);
 		}
+		n->set_timing_activation(&timing);
+	}
+	for (auto it=registers.begin();it!=registers.end();it++){
+		ds_timing::TNode *r = *it;
+		r->get_sink()->set_timing_activation(&timing);
 	}
 	nodes.clear();
 	nodes.insert(nodes.begin(), temp.begin(), temp.end());
 	nodes.insert(nodes.begin(), registers.begin(), registers.end());
+
 }
 
 void ds_timing::TNode::calculate_transitions(ds_workspace::Workspace *workspace) {

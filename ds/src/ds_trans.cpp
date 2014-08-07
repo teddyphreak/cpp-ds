@@ -195,7 +195,8 @@ void ds_trans::write_test_procedures(const std::string& dofile_name, const std::
 	const ds_trans::TimeplateDesc& tp_fast,
 	const ds_trans::ScanProperties& properties,
 	const std::string& pattern_file,
-	const std::string& fault_file){
+	const std::string& fault_file,
+	const std::string& verilog_file){
 
 	if (map->get_input_chains() != map->get_output_chains()){
 		BOOST_LOG_TRIVIAL(error) << "Number of input and output scan chains does not match";
@@ -244,6 +245,7 @@ void ds_trans::write_test_procedures(const std::string& dofile_name, const std::
 		dofile << "create patterns -auto" << std::endl;
 		dofile << "report faults > " << fault_file << std::endl;
 		dofile << "save patterns " << pattern_file << " -procfile -wgl -replace -parallel -begin 0 -scan_test -mode_internal" << std::endl;
+		dofile << "save patterns " << verilog_file << " -verilog -replace -scan_test" << std::endl;
 		dofile << "exit" << std::endl;
 		dofile.close();
 	}

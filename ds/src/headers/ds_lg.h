@@ -594,7 +594,6 @@ namespace ds_lg {
 		 * Calculate output value by evaluating simulation function with 2 inputs
 		 */
 		virtual void sim() {
-			//std::s << "a: " << std::hex << a << " b: " << b << std::endl;
 			o = (*A)(a,b);
 			return;
 		}
@@ -1481,6 +1480,35 @@ namespace ds_lg {
 		 */
 		virtual void initialize(){}
 
+		template<class C>
+		void get_input_cone(N* node, C& container){
+			if (!node->has_state()){
+				get_fanin(node, container);
+			} else {
+				container.insert(node);
+				for (N* in : node->inputs){
+					get_fanin(in, container);
+				}
+			}
+		}
+
+		template<class C>
+		void get_fanin(N* node, C& container){
+
+			auto it = container.find(node);
+			if (it != container.end())
+				return;
+
+			container.insert(node);
+
+			if (node->has_state())
+				return;
+
+			for (N* in : node->inputs){
+				get_fanin(in, container);
+			}
+		}
+
 		GenericLeveledGraph<N, R, I, O, V>(){}
 
 	protected:
@@ -1543,7 +1571,7 @@ namespace ds_lg {
 		void attach_output_observers(std::map<LogicNode*, ErrorObserver*>& output_map,
 				ds_common::int64 *detected, ds_common::int64 *possibly_detected);
 
-		void attach_output_observers(ds_common::int64 *detected);
+		void attach_output_observers(ds_common::int64 *detected, ds_common::int64 *possibly_detected);
 
 		void remove_output_observers();
 

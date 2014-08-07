@@ -273,7 +273,15 @@ void ds_faults::delete_faults(std::map<SAFaultDescriptor*, std::list<SAFaultDesc
 	}
 }
 
-ds_faults::FaultList::FaultList(ds_structural::NetList* nl){
+ds_faults::FaultList::FaultList() : uk({}), ds({}), np({}), ud({}), representatives({}), fault_map({}) {}
+void ds_faults::FaultList::add(SAFaultDescriptor* saf) {
+    this->representatives[saf->get_string()] = saf;
+    uk.insert(saf);
+    fault_map[saf] = UK;
+}
+uint ds_faults::FaultList::size() {return this->representatives.size();}
+
+ds_faults::FaultList::FaultList(ds_structural::NetList* nl) {
 	std::map<SAFaultDescriptor*, std::list<SAFaultDescriptor*>* >* universe = ds_faults::get_fault_universe(nl);
 	for (auto it=universe->begin();it!=universe->end();it++){
 		SAFaultDescriptor* f = new SAFaultDescriptor(*it->first);
@@ -317,6 +325,8 @@ std::set<SAFaultDescriptor*>* ds_faults::FaultList::find_container(const FaultCa
 		return &ud;
 	case ds_faults::NP:
 		return &np;
+	case ds_faults::UR:
+	  return &ur;
 	default:
 		return 0;
 	}
@@ -367,7 +377,7 @@ ds_lg::int64 ds_faults::TransitionFault::compare(const ds_lg::driver_v64* a, con
 }
 
 
-ds_faults::MFaultList::MFaultList() : flst(ds_faults::FaultList()), mflst({}) {}
+ds_faults::MFaultList::MFaultList() : flst(ds_faults::FaultList()), mflst({}), cnt_rejected(0) {}
 
 ds_faults::MFaultList::MFaultList(ds_structural::NetList* nl, std::string filename) : MFaultList() {
 	load_MFL(nl, filename);
@@ -376,40 +386,81 @@ ds_faults::MFaultList::MFaultList(ds_structural::NetList* nl, std::string filena
 bool ds_faults::MFaultList::load_MFL(ds_structural::NetList* nl, std::string filename) {
     std::ifstream ifs(filename);
     std::string def;
-    if (!ifs.is_open()) {
-    	return false;
-    }
+    if (!ifs.is_open()) {return false;}
     while (!ifs.eof()) {
         std::getline(ifs, def);
-        if (!add(nl, def)) {
-        	return false;
-        }
+        if (def != "" && !boost::starts_with(def, "//")) {if (!add(nl, def)) {return false;}}
     }
+    ifs.close();
+    return true;
+}
+
+bool ds_faults::MFaultList::store_MFL(std::string filename) {
+    std::ofstream ofs(filename);
+    if (!ofs.is_open()) {return false;}
+    for(auto it : mflst) {
+        FaultCategory ftype = flst.get_fault_category(it.first);
+        if (ftype == DS) {ofs << "DS,";} else if (ftype == UR) {ofs << "UR,";} else {ofs << "UK,";}
+        ds_faults::SAFaultDescriptor *f = flst.representatives[it.first];
+        ofs << f->gate_name << "@" << f->port_name << "@" << (f->value == 0 ? "0" : "1") << "=" << this->get_MF_str(it.first) << std::endl;
+    }
+    ofs.close();
+    return true;
+}
+
+bool ds_faults::MFaultList::add(ds_faults::SAFaultDescriptor* saf, ds_faults::StuckAt* sa) {
+    mflst[saf->get_string()].push_back(sa);
+    flst.add_undetected(saf);
+    this->cnt_total++;
     return true;
 }
 
 // line format example: \inst_cpu_ip_alx/alx_e_dra_reg[0] @Q@1=\inst_cpu_ip_alx/alx_e_dra_reg_T2[0] @Z@1,SI273@Z@1,\inst_cpu_ip_alx/alx_e_dra_reg_T3[0] @Z@1,
 bool ds_faults::MFaultList::add(ds_structural::NetList* nl, std::string definition) {
-    boost::regex rx_def("([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]*)@([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]+)@([01])=(.*)");
+    boost::regex rx_def("([A-Z][A-Z]),([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]*)@([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]+)@([01])=(.*)");
     boost::regex rx_singlefault("([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]*)@([a-zA-Z0-9\\\\\\[\\]\\/\\_\\-\\s]+)@([01])");
     boost::smatch match;
 
     if (!boost::regex_search(definition, match, rx_def)) {
-    	return false;
+        std::cout << "Warning: fault list entry not parseable: " << definition << "\n";
+        return false;
     }
 
-    ds_faults::SAFaultDescriptor* saf = new ds_faults::SAFaultDescriptor(match[1].str(),match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3]));
-    std::string fl = match[4].str();
+    std::string ftype = match[1].str();
+    ds_faults::SAFaultDescriptor* saf = new ds_faults::SAFaultDescriptor(match[2].str(),match[3].str(), (ds_common::Value) boost::lexical_cast<int>(match[4].str()));
+    //std::cout << "adding fault " << match[1].str() << ", " << match[2].str() << ", " << match[3].str() << ", " << match[4].str() << std::endl;
+    std::string fl = match[5].str();
     std::vector<std::string> sfd;
+    ds_faults::StuckAt* sa;
     boost::algorithm::split(sfd, fl, boost::algorithm::is_any_of(","));
     for (std::string sf : sfd) {             //for all single faults of this fault group:
-        if (!boost::regex_search(sf, match, rx_singlefault)) {
-        	return false;
+        if (!boost::regex_search(sf, match, rx_singlefault)) {return false;}
+        if (match[1].str() != "" && nl->find_gate(match[1].str()) == NULL) {            //check if gate exists
+            std::cout << "Warning: gate " << match[1].str() << " not existing, fault list entry " << definition << "\n";
+            this->cnt_rejected++;
+        } else if (match[1].str() == "" && nl->find_port_by_name(match[2].str()) == NULL) {
+            std::cout << "Warning: top-level port " << match[2].str() << " not existing, fault list entry " << definition << "\n";
+            this->cnt_rejected++;
+        } else {
+            if (match[1].str() == nl->get_instance_name()) {
+                        sa = new ds_faults::StuckAt(nl, "", match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3].str()));
+            } else {
+                        sa = new ds_faults::StuckAt(nl, match[1].str(), match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3].str()));
+            }
+            mflst[saf->get_string()].push_back(sa);
         }
-        ds_faults::StuckAt* sa = new ds_faults::StuckAt(nl, match[1].str(), match[2].str(), (ds_common::Value) boost::lexical_cast<int>(match[3]));
-        mflst[saf->get_string()].push_back(sa);
     }
     flst.add_undetected(saf);
+
+    if (ftype == "DS") {
+        flst.set_fault_category(saf, ds_faults::DS);
+    } else if (ftype == "US") {
+        flst.set_fault_category(saf, ds_faults::UR);
+    } else {
+        if (ftype != "UK") {std::cout << "Warning: unparseable fault type " << ftype << " degraded to UK\n";}
+
+    }
+    this->cnt_total++;
     return true;
 }
 
@@ -417,6 +468,22 @@ ds_faults::FaultList* ds_faults::MFaultList::get_faultlist() {
 	return &flst;
 }
 
-ds_faults::MSAFault ds_faults::MFaultList::get_MF(std::string descriptor) {
-	return mflst[descriptor];
+ds_faults::MSAFault ds_faults::MFaultList::get_MF(std::string fault_descriptor) {
+	return mflst[fault_descriptor];
 }
+
+std::string ds_faults::MFaultList::get_MF_str(std::string fault_descriptor) {
+    std::string result = "";
+    MSAFault msa = this->get_MF(fault_descriptor);
+    for (uint i=0; i<msa.size(); i++) {
+        result += msa[i]->get_gate_name() + "@" + msa[i]->get_port_name() + "@" + (msa[i]->get_value() == 0 ? "1" : "0");
+        if (i < msa.size()-1) {result += ",";}
+    }
+    return result;
+}
+
+uint ds_faults::MFaultList::get_count(std::string fault_descriptor) {
+    ds_faults::MSAFault fmlst = this->get_MF(fault_descriptor);
+    return fmlst.size();
+}
+

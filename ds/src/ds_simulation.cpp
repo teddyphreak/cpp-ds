@@ -65,13 +65,6 @@ void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds
 	std::map<LogicNode*, ds_lg::ErrorObserver*> output_map;
 	lg->attach_output_observers(output_map, &detected, &possibly_detected);
 
-	for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
-		LogicNode *o = *it;
-		ds_lg::ErrorObserver *observer = new ds_lg::ErrorObserver(&detected, &possibly_detected);
-		output_map[o] = observer;
-		o->add_monitor(observer);
-	}
-
 	//repeat for all pattern blocks
 	int c = 0;
 	while (provider->has_next()){
@@ -342,47 +335,65 @@ void ds_simulation::run_transition_fault_coverage(ds_lg::TLeveledGraph* lg, ds_f
  *
  */
 void ds_simulation::run_combinational_fault_coverage(ds_lg::LeveledGraph* lg, ds_faults::MFaultList* mfl,
-		ds_pattern::CombinationalPatternList& pattern_list, ds_common::int64 *detected){
+						     ds_pattern::CombinationalPatternList& pattern_list, std::map<ds_lg::LogicNode*, ds_lg::ErrorObserver*>& output_map, ds_common::int64 *detected){
 
+    //std::cout << "VECTOR CNT " << pattern_list.get_vector_count() << std::endl;
 	ds_pattern::CombinationalPatternProvider *provider = new ds_pattern::CombinationalPatternProvider(pattern_list);
 
 	ds_faults::FaultList* fl = mfl->get_faultlist();
 	std::vector<SAFaultDescriptor*> undetected;
 	fl->get_undetected_faults(undetected);
 
+	//	std::cout << "SIZE: " << undetected.size() << std::endl;
+
 	while (provider->has_next()){
+
 		ds_pattern::SimPatternBlock *block = provider->next();
+
+		if (block->num_patterns == 0)
+		  continue;
 
 		lg->sim(block);
 
+		for (auto it=lg->outputs.begin(); it!=lg->outputs.end();it++){
+			LogicNode *output = *it;
+			ds_lg::ErrorObserver *observer = output_map[output];
+			observer->set_spec(output->peek());
+		}
+
+		int f_cnt = 0;
 		for (SAFaultDescriptor* d: undetected){
 
-			ds_faults::MSAFault locations = mfl->get_MF(d->get_string());
-
+            ds_faults::MSAFault locations = mfl->get_MF(d->get_string());
 			std::vector<LogicNode*> nodes;
+
+            //std::cout << "Descriptor: " << d->get_string() << " -- " << locations.size() << std::endl;
 
 			for (ds_faults::StuckAt* f: locations){
 
-				LogicNode *n = lg->get_node(d->gate_name);
-
-				n->add_hook(f);
-
-				lg->push_node(n);
-
+			  LogicNode *n = f->get_hook_node(lg);
+			  nodes.push_back(n);
+			  if (n==0){
+			    //  std::cout << "Skipping fault " << f->get_string() << ": No equivalent node found" << std::endl;
+			    BOOST_LOG_TRIVIAL(warning) << "Skipping fault " << f->get_string() << ": No equivalent node found";
+			  } else {
+			    n->add_hook(f);
+			    lg->push_node(n);
+			  }
 			}
 
 			*detected = 0;
 
 			lg->sim_intermediate();
 
-			if (detected != 0){
-				fl->set_fault_category(d, ds_faults::DS);
+			if (*detected != 0){
+			  f_cnt++;
+			  fl->set_fault_category(d, ds_faults::DS);
 			}
 
 			for (LogicNode *n:nodes){
-				n->remove_hooks();
+			  n->remove_hooks();
 			}
-
 		}
 	}
 }

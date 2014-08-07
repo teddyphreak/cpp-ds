@@ -416,7 +416,9 @@ namespace ds_structural {
 		friend class ds_library::instance_visitor;
 	private:
 		const std::string DS_SIGNAL_PREFIX = "ds_"; //!< prefix for automatically generated signals
+    public:
 		gate_map_t gates;							//!< gates in the netlist
+    private:
 		signal_map_t signals;						//!< signals in the netlist
 		int signal_counter;							//!< number of signals so far
 		signal_map_t own_signals;					//!< auxiliary signals
@@ -506,6 +508,7 @@ namespace ds_structural {
 		 */
 		Gate* find_gate(const std::string& name){
 			gate_map_t::iterator it;
+			if (name == "") {return this;}
 			it = gates.find(name);
 			if (it!=gates.end())
 				return it->second;

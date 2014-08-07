@@ -72,7 +72,7 @@ namespace ds_trans {
 
 	void insert_top_level_scan(std::string top_level, std::string scan_port, ds_structural::NetList *nl, std::vector<std::vector<ds_structural::Gate*> >& ffs);
 
-	void write_test_procedures(const std::string& dofile_name, const std::string& tp_name, const std::string& sg_name, const ds_structural::CombinationalScanMap *map, const TimeplateDesc& tp_slow, const TimeplateDesc& tp_fast, const ds_trans::ScanProperties& properties, const std::string& patttern_file, const std::string& fault_file);
+	void write_test_procedures(const std::string& dofile_name, const std::string& tp_name, const std::string& sg_name, const ds_structural::CombinationalScanMap *map, const TimeplateDesc& tp_slow, const TimeplateDesc& tp_fast, const ds_trans::ScanProperties& properties, const std::string& patttern_file, const std::string& fault_file, const std::string& verilog_file);
 
 	template<class T>
 	void print_load_unload(T& out, const TimeplateDesc& tp, const std::string& scan_group,

@@ -9,6 +9,7 @@
 #define DS_PATTERN_H_
 
 #include "ds_common.h"
+#include "ds_structural.h"
 #include <fstream>
 #include <map>
 #include <unordered_map>
@@ -443,6 +444,7 @@ namespace ds_pattern {
 		PatternValue ports;
 		PatternValue scan;
 		std::string timeplate_name;
+		ate_cycle(uint n_ports) : ports(n_ports), scan(0), timeplate_name("") {};
 		ate_cycle(const PatternValue& p, const PatternValue& s, const std::string& tp): ports(p),scan(s), timeplate_name(tp){};
 		ate_cycle(const PatternValue& p, const std::string& tp): ports(p), timeplate_name(tp){};
 	};
@@ -470,6 +472,13 @@ namespace ds_pattern {
 		 * @param compact true if compatible patterns are discarded
 		 */
 		CombinationalPatternList(const scan_data& sc, bool compact = true);
+		CombinationalPatternList(const ds_structural::NetList* nl);
+
+        void clear();
+        size_t size();
+        void add(const ds_pattern::ate_cycle& p);
+        ds_pattern::ate_cycle get(std::size_t index);
+
 		/*
 		 * several convenience methods
 		 */
@@ -482,6 +491,7 @@ namespace ds_pattern {
 		std::string get_port_name(const std::size_t offset) const {return port_order[offset];}
 		port_definition::const_iterator begin_port_order() const {return port_order.begin();}
 		port_definition::const_iterator end_port_order() const {return port_order.end();}
+		void add_pattern(ate_cycle p) {this->cycles.push_back(p);}
 		virtual ~CombinationalPatternList(){}
 	};
 

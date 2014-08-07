@@ -8,6 +8,7 @@
 #include "ds_pattern.h"
 #include <fstream>
 #include "ds_common.h"
+#include "ds_common.h"
 #include <boost/exception/all.hpp>
 #include <boost/spirit/include/support_istream_iterator.hpp>
 #include <boost/log/trivial.hpp>
@@ -120,6 +121,22 @@ ds_pattern::CombinationalPatternList::CombinationalPatternList(const scan_data& 
 		}
 	}
 }
+
+ds_pattern::CombinationalPatternList::CombinationalPatternList(const ds_structural::NetList* nl) :
+                    inputs(nl->get_inputs()->size()), outputs(nl->get_outputs()->size()), cycles({}), port_order({}) {
+    for (auto pi=nl->get_inputs()->begin(); pi!=nl->get_inputs()->end();pi++ ){
+        this->port_order.push_back((*pi)->get_instance_name());
+    }
+    for (auto po=nl->get_outputs()->begin(); po!=nl->get_outputs()->end(); po++) {
+        this->port_order.push_back((*po)->get_instance_name());
+    }
+}
+
+void ds_pattern::CombinationalPatternList::clear(void) {this->cycles.clear();}
+size_t ds_pattern::CombinationalPatternList::size(void) {return this->cycles.size();}
+void ds_pattern::CombinationalPatternList::add(const ds_pattern::ate_cycle& p) {this->cycles.push_back(p);}
+
+ds_pattern::ate_cycle ds_pattern::CombinationalPatternList::get(std::size_t index) {return this->cycles[index];}
 
 bool ds_pattern::PatternValue::is_compatible(const PatternValue& pv){
 	boost::dynamic_bitset<> t_x(pv.x);
@@ -365,7 +382,7 @@ ds_pattern::SequentialPatternProvider::SequentialPatternProvider(const ds_patter
 
 					std::size_t pos = curr - block_start;
 					set_values(pos, cell_offset, v, b);
-					if ((last != ds_common::WIDTH) && ((scan_cycles - block_start)==last-1))
+					if (((int) last != ds_common::WIDTH) && ((scan_cycles - block_start)==last-1))
 						break;
 
 					ds_pattern::PatternValue launch = pl.get_port_values(idx++);
