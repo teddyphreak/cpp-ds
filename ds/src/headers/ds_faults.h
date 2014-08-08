@@ -19,7 +19,7 @@
 namespace ds_faults {
 
 /*!
- * this interface identifies the a pin in a leveled graph
+ * this interface identifies the a netlist location (actual names) in a leveled graph
  */
 class PinReference {
 public:
@@ -55,8 +55,8 @@ public:
 /*!
  * returns a pointer to the corresponding simulation primitive in the leveled graph
  * @param pr pin reference to resolve
- * @param lg leveled graph where the reference is resolved
- * @return
+ * @param res resolver instance to map netlist names to lg representations
+ * @return pointer to a node in the graph
  */
 
 template<class T, class V>
@@ -107,7 +107,19 @@ protected:
 	std::string gate_port_name;
 public:
 
+	/**
+	 * Template function. Compares to simulation values to check if fault is active
+	 * @param a first operand
+	 * @param b second operand
+	 * @return activation mask. Bit i is one if the the fault is active in slot i
+	 */
 	virtual ds_lg::int64 compare(const T* a, const T& b) const = 0;
+
+	/**
+	 * Template function. Transforms a symbolic value into an essential simulation value.
+	 * @param v binary value to be transformed
+	 * @return equivalent simulation value
+	 */
 	virtual T convert(const ds_common::Value& v) const = 0;
 
 	/*!
@@ -164,7 +176,7 @@ public:
 	}
 
 	/*
-	 * mask setter and getter
+	 * mask setter and getter. A fault in slot i can only by activated if bit position i of the mask is set
 	 */
 	ds_lg::int64 get_mask() const {
 		return mask;
@@ -238,7 +250,7 @@ public:
 	virtual bool is_input() const {return isInput;}
 	virtual bool is_output() const {return isOutput;}
 	/*
-	 * male destructor virtual
+	 * make destructor virtual
 	 */
 	virtual ~StaticFault(){}
 };
@@ -265,12 +277,22 @@ public:
 		add_condition(this,value);
 	}
 
+	/**
+	 *  Returns the difference between the binary values of the operands and their previous values(X's are ignored)
+	 * @param a first operand
+	 * @param b second operand
+	 * @return activation mask. Bit i is one if the the fault is active in slot i
+	 */
 	virtual ds_lg::int64 compare(const ds_lg::lg_v64* a, const ds_lg::lg_v64& b) const{
 		ds_common::int64 v = a->v;
 		ds_common::int64 p = b.v;
 		return ~(v ^ p) ;
 	}
-
+	/**
+	 * Transforms a symbolic value into an essential simulation value.
+	 * @param v binary value to be transformed
+	 * @return equivalent simulation value
+	 */
 	virtual ds_lg::lg_v64 convert(const ds_common::Value& v) const {
 		if (v==ds_common::BIT_0){
 			return ds_lg::lg_v64(0L,0L);
@@ -280,12 +302,14 @@ public:
 		return ds_lg::lg_v64(0L,-1L);
 	}
 
-	virtual ~StuckAt(){}
+	bool get_value() {return (this->value == ds_common::BIT_1);}
+
 
     std::string get_string() {
         return this->get_gate_name() + "/" + this->get_port_name() + "/" + ((this->get_value() == ds_common::BIT_0) ? "0" : "1");
     }
-	bool get_value() {return (this->value == ds_common::BIT_1);}
+
+	virtual ~StuckAt(){}
 };
 
 class TStuckAt : public StaticFault<ds_lg::TNode, ds_lg::driver_v64> {
@@ -307,12 +331,22 @@ public:
 		add_condition(this,value);
 	}
 
+	/**
+	 * Returns the difference between the binary values of the operands and their previous values(X's and previous values are ignored)
+	 * @param a first operand
+	 * @param b second operand
+	 * @return activation mask. Bit i is one if the the fault is active in slot i
+	 */
 	virtual ds_lg::int64 compare(const  ds_lg::driver_v64* a, const  ds_lg::driver_v64& b) const{
 		ds_common::int64 v = a->value.v;
 		ds_common::int64 p = b.value.v;
 		return ~(v ^ p) ;
 	}
-
+	/**
+	 * Transforms a symbolic value into an essential simulation value.
+	 * @param v binary value to be transformed
+	 * @return equivalent simulation value
+	 */
 	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
 		if (v==ds_common::BIT_0){
 			return ds_lg::lg_v64(0L,0L);
@@ -344,8 +378,19 @@ public:
 		add_condition(this,value);
 	}
 
+	/**
+	 *  Returns the difference between the binary values of the operands (X's and driver are ignored)
+	 * @param a first operand
+	 * @param b second operand
+	 * @return activation mask. Bit i is one if the the fault is active in slot i
+	 */
 	virtual ds_lg::int64 compare(const ds_lg::driver_v64* a, const ds_lg::driver_v64& b) const;
 
+	/**
+	 * Transforms a symbolic value into an essential simulation value. Driver is set to null
+	 * @param v binary value to be transformed
+	 * @return equivalent simulation value
+	 */
 	virtual ds_lg::driver_v64 convert(const ds_common::Value& v) const {
 		if (v==ds_common::BIT_0){
 			return ds_lg::driver_v64(0L,0L);
@@ -355,6 +400,10 @@ public:
 		return ds_lg::driver_v64(0L,-1L);
 	}
 
+	/**
+	 * convenience function to print out a stuck-at fault (for debug)
+	 * @return
+	 */
 	std::string get_string(){
 		std::string s = node_name + "/" + node_port_name + "@";
 		if (value == ds_common::BIT_0)
@@ -527,6 +576,11 @@ public:
 		}
 	}
 
+	/**
+	 * queries the fault list for a representative fault
+	 * @param desc fault descriptor
+	 * @return corresponding representative fault instance in the list
+	 */
 	SAFaultDescriptor* get_representative(const std::string& desc){
 		return representatives[desc];
 	}
@@ -662,6 +716,13 @@ struct fastscan_fault_parser : qi::grammar<Iterator,fastscan_descriptor()>
 	qi::rule<Iterator, fastscan_descriptor()> start;
 };
 
+/**
+ * parses file containing fault descriptions in fastscan format
+ * @param first iterator pointing to the beginning of the structure to parse
+ * @param first iterator pointing to the end of the structure to parse
+ * @param descriptors intermediate text representation of faults
+ * @return true if parsing was successful
+ */
 template <typename Iterator>
 bool parse_fastscan_faults(Iterator first, Iterator last, std::vector<fastscan_descriptor>& descriptors){
 
@@ -676,9 +737,14 @@ bool parse_fastscan_faults(Iterator first, Iterator last, std::vector<fastscan_d
 	return parse;
 }
 
-typedef std::vector<ds_faults::StuckAt*> MSAFault;
-
+/**
+ * Reads in a file and parses faults in fastscan format
+ * @param file_name name of the file to parse
+ * @param descriptors container for the parsed data
+ */
 void read_fastscan_descriptors(const std::string& file_name, std::vector<fastscan_descriptor>& descriptors);
+
+typedef std::vector<ds_faults::StuckAt*> MSAFault;
 
 class MFaultList {
  private:

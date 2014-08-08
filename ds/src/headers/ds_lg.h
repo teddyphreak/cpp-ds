@@ -150,7 +150,6 @@ namespace ds_lg {
 		 * activation condition for this fault. Derived classes implement this method to set the behavior of a fault
 		 * @return 1 in bit position i if fault is active in slot i
 		 */
-	virtual ds_lg::int64 hook(ds_lg::Resolver<T> *res) const=0;
 	/*!
 	 * Returns the port name in the leveled graph node where the fault is inserted
 	 * @return
